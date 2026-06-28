@@ -8,7 +8,7 @@ window.App = window.App || {};
   "use strict";
 
   // Bump on each release; shown in the sidebar so you can confirm the live build.
-  App.VERSION = "build 7 · metalflow";
+  App.VERSION = "build 8 · metalflow";
 
   /* ---- Metal groups: drive colour coding + LME price linkage ---- */
   // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
@@ -137,5 +137,16 @@ window.App = window.App || {};
     "trader", "trading", "commodity", "raw materials", "category manager",
     "commercial", "head of metals"
   ];
+
+  /* Deal pipeline stages (Kanban columns). */
+  App.STAGES = [
+    { key: "lead",        label: "Lead",         color: "#7f93a8" },
+    { key: "offer",       label: "Offer sent",   color: "#3b9ae1" },
+    { key: "negotiation", label: "Negotiation",  color: "#f5b915" },
+    { key: "contract",    label: "Contract",     color: "#b07cf0" },
+    { key: "won",         label: "Won",          color: "#30a46c" },
+    { key: "lost",        label: "Lost",         color: "#e5484d" }
+  ];
+  App.stageLabel = function (k) { var s = App.STAGES.find(function (x) { return x.key === k; }); return s ? s.label : k; };
 
 })(window.App);

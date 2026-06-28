@@ -37,7 +37,8 @@ window.App = window.App || {};
     followUpDays: 4,            // a buyer stuck on 'awaiting reply' longer than this needs follow-up
     alertPct: 2,                // flag a metal on the dashboard when it moves more than this %
     offerTemplate: "",          // custom offer email/PDF body (blank = built-in)
-    loiTemplate: ""             // custom Letter of Intent body (blank = built-in)
+    loiTemplate: "",            // custom Letter of Intent body (blank = built-in)
+    docTemplates: {}            // { sco, icpo, ncnda, contract } custom trade-doc bodies
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -104,7 +105,9 @@ window.App = window.App || {};
       prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)),
       companies: companies,
       customCountries: [],
-      sheet: []
+      sheet: [],
+      deals: [],
+      tasks: []
     };
   }
 
@@ -123,6 +126,9 @@ window.App = window.App || {};
     });
     if (!Array.isArray(s.settings.templates)) s.settings.templates = [];
     if (!s.settings.margins || typeof s.settings.margins !== "object") s.settings.margins = {};
+    if (!s.settings.docTemplates || typeof s.settings.docTemplates !== "object") s.settings.docTemplates = {};
+    if (!Array.isArray(s.deals)) s.deals = [];
+    if (!Array.isArray(s.tasks)) s.tasks = [];
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
     // migrate legacy flat sheet rows -> categories with contacts
@@ -435,6 +441,32 @@ window.App = window.App || {};
       var c = (load().sheet || []).find(function (x) { return x.id === catId; });
       if (c) { c.contacts = (c.contacts || []).filter(function (x) { return x.id !== contactId; }); save(); }
     },
+
+    /* ---------- Deal pipeline ---------- */
+    deals: function () { var s = load(); if (!Array.isArray(s.deals)) s.deals = []; return s.deals; },
+    addDeal: function (data) {
+      var s = load(); if (!Array.isArray(s.deals)) s.deals = [];
+      var d = Object.assign({ id: uid(), title: "", buyer: "", buyerId: "", product: "", stage: "lead", value: "", notes: "", createdAt: Date.now(), updatedAt: Date.now() }, data || {});
+      s.deals.push(d); save(); return d;
+    },
+    updateDeal: function (id, patch) {
+      var d = this.deals().find(function (x) { return x.id === id; });
+      if (d) { Object.assign(d, patch, { updatedAt: Date.now() }); save(); }
+    },
+    deleteDeal: function (id) { var s = load(); s.deals = (s.deals || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Tasks ---------- */
+    tasks: function () { var s = load(); if (!Array.isArray(s.tasks)) s.tasks = []; return s.tasks; },
+    addTask: function (data) {
+      var s = load(); if (!Array.isArray(s.tasks)) s.tasks = [];
+      var t = Object.assign({ id: uid(), text: "", due: "", done: false, buyerId: "", createdAt: Date.now() }, data || {});
+      s.tasks.push(t); save(); return t;
+    },
+    updateTask: function (id, patch) {
+      var t = this.tasks().find(function (x) { return x.id === id; });
+      if (t) { Object.assign(t, patch); save(); }
+    },
+    deleteTask: function (id) { var s = load(); s.tasks = (s.tasks || []).filter(function (x) { return x.id !== id; }); save(); },
 
     /* ---------- Team sync hooks ---------- */
     setChangeHook: function (fn) { changeHook = fn; },

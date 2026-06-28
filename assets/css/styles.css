@@ -334,3 +334,30 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .sheet-cat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .cat-name { background: var(--bg-2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 15px; font-weight: 700; min-width: 220px; }
 .cat-name:focus { outline: none; border-color: var(--accent-2); }
+
+
+/* ---------- Deal pipeline (Kanban) ---------- */
+.pipe-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.pipe-col { flex: 0 0 230px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; }
+.pipe-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 13px; padding: 6px 4px 8px; border-top: 3px solid var(--line); border-radius: 2px; margin-bottom: 6px; }
+.deal { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px; margin-bottom: 7px; }
+.deal-t { font-weight: 600; font-size: 13px; }
+.deal-m { color: var(--muted); font-size: 12px; margin: 2px 0; }
+.deal-v { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--accent); }
+.deal-actions { display: flex; gap: 5px; margin-top: 7px; align-items: center; }
+.deal-actions select { flex: 1; min-width: 0; background: var(--bg-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 11px; }
+
+/* ---------- Tasks ---------- */
+.tasklist { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.task { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; }
+.task.done .task-text { text-decoration: line-through; color: var(--muted); }
+.task-text { flex: 1; background: transparent; border: 1px solid transparent; color: var(--text); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.task-text:hover, .task-text:focus { border-color: var(--line); outline: none; background: var(--bg-2); }
+.task-due { background: var(--bg-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 5px 7px; font-size: 12px; }
+.task-due.overdue { border-color: var(--red); color: var(--red); }
+
+/* ---------- Calculator ---------- */
+.calc-out { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.calc-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px; }
+.calc-row span:last-child { font-family: ui-monospace, Menlo, monospace; }
+.calc-row.strong { font-weight: 700; font-size: 15px; color: var(--accent); }

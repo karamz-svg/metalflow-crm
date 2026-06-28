@@ -343,6 +343,33 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .cat-name { background: var(--bg-2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 15px; font-weight: 700; min-width: 220px; }
 .cat-name:focus { outline: none; border-color: var(--accent-2); }
 
+
+/* ---------- Deal pipeline (Kanban) ---------- */
+.pipe-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.pipe-col { flex: 0 0 230px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; }
+.pipe-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 13px; padding: 6px 4px 8px; border-top: 3px solid var(--line); border-radius: 2px; margin-bottom: 6px; }
+.deal { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px; margin-bottom: 7px; }
+.deal-t { font-weight: 600; font-size: 13px; }
+.deal-m { color: var(--muted); font-size: 12px; margin: 2px 0; }
+.deal-v { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--accent); }
+.deal-actions { display: flex; gap: 5px; margin-top: 7px; align-items: center; }
+.deal-actions select { flex: 1; min-width: 0; background: var(--bg-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 11px; }
+
+/* ---------- Tasks ---------- */
+.tasklist { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.task { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; }
+.task.done .task-text { text-decoration: line-through; color: var(--muted); }
+.task-text { flex: 1; background: transparent; border: 1px solid transparent; color: var(--text); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.task-text:hover, .task-text:focus { border-color: var(--line); outline: none; background: var(--bg-2); }
+.task-due { background: var(--bg-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 5px 7px; font-size: 12px; }
+.task-due.overdue { border-color: var(--red); color: var(--red); }
+
+/* ---------- Calculator ---------- */
+.calc-out { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.calc-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px; }
+.calc-row span:last-child { font-family: ui-monospace, Menlo, monospace; }
+.calc-row.strong { font-weight: 700; font-size: 15px; color: var(--accent); }
+
 </style>
 </head>
 <body>
@@ -382,7 +409,7 @@ window.App = window.App || {};
   "use strict";
 
   // Bump on each release; shown in the sidebar so you can confirm the live build.
-  App.VERSION = "build 7 · metalflow";
+  App.VERSION = "build 8 · metalflow";
 
   /* ---- Metal groups: drive colour coding + LME price linkage ---- */
   // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
@@ -511,6 +538,17 @@ window.App = window.App || {};
     "trader", "trading", "commodity", "raw materials", "category manager",
     "commercial", "head of metals"
   ];
+
+  /* Deal pipeline stages (Kanban columns). */
+  App.STAGES = [
+    { key: "lead",        label: "Lead",         color: "#7f93a8" },
+    { key: "offer",       label: "Offer sent",   color: "#3b9ae1" },
+    { key: "negotiation", label: "Negotiation",  color: "#f5b915" },
+    { key: "contract",    label: "Contract",     color: "#b07cf0" },
+    { key: "won",         label: "Won",          color: "#30a46c" },
+    { key: "lost",        label: "Lost",         color: "#e5484d" }
+  ];
+  App.stageLabel = function (k) { var s = App.STAGES.find(function (x) { return x.key === k; }); return s ? s.label : k; };
 
 })(window.App);
 
@@ -713,7 +751,8 @@ window.App = window.App || {};
     followUpDays: 4,            // a buyer stuck on 'awaiting reply' longer than this needs follow-up
     alertPct: 2,                // flag a metal on the dashboard when it moves more than this %
     offerTemplate: "",          // custom offer email/PDF body (blank = built-in)
-    loiTemplate: ""             // custom Letter of Intent body (blank = built-in)
+    loiTemplate: "",            // custom Letter of Intent body (blank = built-in)
+    docTemplates: {}            // { sco, icpo, ncnda, contract } custom trade-doc bodies
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -780,7 +819,9 @@ window.App = window.App || {};
       prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)),
       companies: companies,
       customCountries: [],
-      sheet: []
+      sheet: [],
+      deals: [],
+      tasks: []
     };
   }
 
@@ -799,6 +840,9 @@ window.App = window.App || {};
     });
     if (!Array.isArray(s.settings.templates)) s.settings.templates = [];
     if (!s.settings.margins || typeof s.settings.margins !== "object") s.settings.margins = {};
+    if (!s.settings.docTemplates || typeof s.settings.docTemplates !== "object") s.settings.docTemplates = {};
+    if (!Array.isArray(s.deals)) s.deals = [];
+    if (!Array.isArray(s.tasks)) s.tasks = [];
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
     // migrate legacy flat sheet rows -> categories with contacts
@@ -1111,6 +1155,32 @@ window.App = window.App || {};
       var c = (load().sheet || []).find(function (x) { return x.id === catId; });
       if (c) { c.contacts = (c.contacts || []).filter(function (x) { return x.id !== contactId; }); save(); }
     },
+
+    /* ---------- Deal pipeline ---------- */
+    deals: function () { var s = load(); if (!Array.isArray(s.deals)) s.deals = []; return s.deals; },
+    addDeal: function (data) {
+      var s = load(); if (!Array.isArray(s.deals)) s.deals = [];
+      var d = Object.assign({ id: uid(), title: "", buyer: "", buyerId: "", product: "", stage: "lead", value: "", notes: "", createdAt: Date.now(), updatedAt: Date.now() }, data || {});
+      s.deals.push(d); save(); return d;
+    },
+    updateDeal: function (id, patch) {
+      var d = this.deals().find(function (x) { return x.id === id; });
+      if (d) { Object.assign(d, patch, { updatedAt: Date.now() }); save(); }
+    },
+    deleteDeal: function (id) { var s = load(); s.deals = (s.deals || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Tasks ---------- */
+    tasks: function () { var s = load(); if (!Array.isArray(s.tasks)) s.tasks = []; return s.tasks; },
+    addTask: function (data) {
+      var s = load(); if (!Array.isArray(s.tasks)) s.tasks = [];
+      var t = Object.assign({ id: uid(), text: "", due: "", done: false, buyerId: "", createdAt: Date.now() }, data || {});
+      s.tasks.push(t); save(); return t;
+    },
+    updateTask: function (id, patch) {
+      var t = this.tasks().find(function (x) { return x.id === id; });
+      if (t) { Object.assign(t, patch); save(); }
+    },
+    deleteTask: function (id) { var s = load(); s.tasks = (s.tasks || []).filter(function (x) { return x.id !== id; }); save(); },
 
     /* ---------- Team sync hooks ---------- */
     setChangeHook: function (fn) { changeHook = fn; },
@@ -1873,7 +1943,10 @@ window.App = window.App || {};
     var top =
       item("dashboard", null, "📊", "Dashboard") +
       item("companies", null, "🏢", "All buyers", companies.length) +
-      item("sheet", null, "📝", "Custom sheet", Store.sheetRows().length || null) +
+      item("pipeline", null, "📈", "Pipeline", Store.deals().length || null) +
+      item("tasks", null, "✅", "Tasks", (Store.tasks().filter(function (t) { return !t.done; }).length) || null) +
+      item("sheet", null, "📂", "Custom sheet", Store.sheetCategories().length || null) +
+      item("calc", null, "🧮", "Calculator") +
       item("products", null, "🪙", "Products", App.PRODUCTS.length) +
       item("settings", null, "⚙️", "Settings");
 
@@ -1905,10 +1978,14 @@ window.App = window.App || {};
     if (route.view === "dashboard") c.innerHTML = viewDashboard();
     else if (route.view === "products") c.innerHTML = viewProducts();
     else if (route.view === "sheet") c.innerHTML = viewSheet();
+    else if (route.view === "pipeline") c.innerHTML = viewPipeline();
+    else if (route.view === "tasks") c.innerHTML = viewTasks();
+    else if (route.view === "calc") c.innerHTML = viewCalc();
     else if (route.view === "settings") c.innerHTML = viewSettings();
     else if (route.view === "companies") c.innerHTML = viewCompanies(null);
     else if (route.view === "country") c.innerHTML = viewCompanies(route.country);
     if (route.view === "settings") refreshGmailStatus();
+    if (route.view === "calc" && App.calcProduct) App.calcProduct();
     var s = c.querySelector(".search");
     if (s) s.focus();
   }
@@ -1988,12 +2065,24 @@ window.App = window.App || {};
         }).join(" ") + "</div>"
       : "";
 
+    // Tasks due / overdue
+    var openTasks = Store.tasks().filter(function (t) { return !t.done; });
+    var dueTasks = openTasks.filter(function (t) { return t.due && new Date(t.due).getTime() < Date.now() + 86400000; });
+    var tasksHtml = dueTasks.length
+      ? '<div class="card" style="margin-bottom:16px;"><h3>✅ Tasks due (' + dueTasks.length + ")</h3>" +
+        '<div class="followups">' + dueTasks.slice(0, 10).map(function (t) {
+          var od = new Date(t.due).getTime() < Date.now() - 86400000;
+          return '<div class="fu"><span class="fu-name" data-nav="tasks">' + esc(t.text || "(task)") + "</span>" +
+            '<span class="fu-days"' + (od ? ' style="color:var(--red)"' : "") + ">" + esc(t.due) + "</span></div>";
+        }).join("") + "</div></div>"
+      : "";
+
     return '<div class="page-head"><div><h2>Sales Dashboard</h2>' +
       '<div class="sub">Track non-ferrous buyers across all 27 EU member states.</div></div>' +
       '<div class="spacer"></div>' +
       '<button class="btn" data-action="sync-gmail">📥 Sync Gmail</button>' +
       '<button class="btn primary" data-action="add-company">+ Add buyer</button></div>' +
-      replyBanner + alertHtml + followHtml +
+      replyBanner + alertHtml + followHtml + tasksHtml +
       '<div class="stat-row">' +
         stat(all.length, "Total buyers") +
         statDot(red, "Not contacted", "red") +
@@ -2076,6 +2165,75 @@ window.App = window.App || {};
       '<div class="spacer"></div>' +
       '<button class="btn primary" data-action="sheet-add-cat">+ Add category</button></div>' +
       blocks;
+  }
+
+  /* ---- Deal pipeline (Kanban) ---- */
+  function viewPipeline() {
+    var deals = Store.deals();
+    var cols = App.STAGES.map(function (st) {
+      var inStage = deals.filter(function (d) { return d.stage === st.key; });
+      var totalUSD = inStage.reduce(function (a, d) { return a + (Number(d.value) || 0); }, 0);
+      var cards = inStage.map(function (d) {
+        var sel = '<select onchange="App.onDealStage(\'' + d.id + '\',this.value)">' +
+          App.STAGES.map(function (s) { return '<option value="' + s.key + '"' + (d.stage === s.key ? " selected" : "") + ">" + esc(s.label) + "</option>"; }).join("") + "</select>";
+        return '<div class="deal">' +
+          '<div class="deal-t">' + esc(d.title || "(untitled)") + "</div>" +
+          '<div class="deal-m">' + esc(d.buyer || "") + (d.product ? " · " + esc(d.product) : "") + "</div>" +
+          '<div class="deal-v">' + (d.value ? Prices.money(Number(d.value)) : "—") + "</div>" +
+          '<div class="deal-actions">' + sel +
+            '<button class="btn sm" data-action="edit-deal" data-id="' + d.id + '">✎</button>' +
+            '<button class="btn sm danger" data-action="del-deal" data-id="' + d.id + '">🗑</button>' +
+          "</div></div>";
+      }).join("");
+      return '<div class="pipe-col"><div class="pipe-head" style="border-top-color:' + st.color + '"><span>' + esc(st.label) +
+        '</span><span class="status-text">' + inStage.length + " · " + Prices.money(totalUSD) + "</span></div>" +
+        (cards || '<div class="status-text" style="padding:10px 4px">—</div>') + "</div>";
+    }).join("");
+    var open = deals.filter(function (d) { return d.stage !== "won" && d.stage !== "lost"; }).reduce(function (a, d) { return a + (Number(d.value) || 0); }, 0);
+    var won = deals.filter(function (d) { return d.stage === "won"; }).reduce(function (a, d) { return a + (Number(d.value) || 0); }, 0);
+    return '<div class="page-head"><div><h2>Deal Pipeline</h2><div class="sub">Open value: <strong>' + Prices.money(open) +
+      "</strong> · Won: <strong>" + Prices.money(won) + "</strong></div></div><div class=\"spacer\"></div>" +
+      '<button class="btn primary" data-action="add-deal">+ New deal</button></div>' +
+      '<div class="pipe-board">' + cols + "</div>";
+  }
+
+  /* ---- Tasks ---- */
+  function viewTasks() {
+    var tasks = Store.tasks().slice().sort(function (a, b) {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return (a.due || "9999") < (b.due || "9999") ? -1 : 1;
+    });
+    var rows = tasks.map(function (t) {
+      var overdue = t.due && !t.done && new Date(t.due).getTime() < Date.now() - 86400000;
+      var buyer = t.buyerId ? Store.companyById(t.buyerId) : null;
+      return '<div class="task' + (t.done ? " done" : "") + '">' +
+        '<input type="checkbox" ' + (t.done ? "checked" : "") + ' onchange="App.onTaskDone(\'' + t.id + '\',this.checked)"/>' +
+        '<input class="task-text" value="' + esc(t.text) + '" onchange="App.onTaskEdit(\'' + t.id + '\',\'text\',this.value)"/>' +
+        '<input type="date" class="task-due' + (overdue ? " overdue" : "") + '" value="' + esc(t.due || "") + '" onchange="App.onTaskEdit(\'' + t.id + '\',\'due\',this.value)"/>' +
+        (buyer ? '<span class="status-text">' + esc(buyer.name) + "</span>" : '<span class="status-text"></span>') +
+        '<button class="btn sm danger" data-action="del-task" data-id="' + t.id + '">🗑</button>' +
+        "</div>";
+    }).join("");
+    return '<div class="page-head"><div><h2>Tasks</h2><div class="sub">To-dos &amp; reminders. Overdue items show in red and on the dashboard.</div></div>' +
+      '<div class="spacer"></div><button class="btn primary" data-action="add-task">+ Add task</button></div>' +
+      '<div class="tasklist">' + (rows || '<div class="empty"><div class="big">✅</div><p>No tasks yet.</p></div>') + "</div>";
+  }
+
+  /* ---- Landed-cost / margin calculator ---- */
+  function viewCalc() {
+    var prodOpts = App.PRODUCTS.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + "</option>"; }).join("");
+    return '<div class="page-head"><div><h2>Landed-cost / margin calculator</h2>' +
+      '<div class="sub">Turn a live metal price into your CIF / landed cost and profit per tonne.</div></div></div>' +
+      '<div class="card" style="max-width:560px">' +
+        '<div class="field"><label>Product (auto base price)</label><select id="calc-prod" onchange="App.calcProduct()">' + prodOpts + "</select></div>" +
+        '<div class="field-2"><div class="field"><label>Base price USD/MT</label><input id="calc-base" type="number" oninput="App.recalcCalc()"/></div>' +
+          '<div class="field"><label>Your margin %</label><input id="calc-margin" type="number" value="3" oninput="App.recalcCalc()"/></div></div>' +
+        '<div class="field-2"><div class="field"><label>Freight USD/MT</label><input id="calc-freight" type="number" value="80" oninput="App.recalcCalc()"/></div>' +
+          '<div class="field"><label>Insurance %</label><input id="calc-ins" type="number" value="0.5" oninput="App.recalcCalc()"/></div></div>' +
+        '<div class="field-2"><div class="field"><label>Import duty %</label><input id="calc-duty" type="number" value="0" oninput="App.recalcCalc()"/></div>' +
+          '<div class="field"><label>Quantity (MT)</label><input id="calc-qty" type="number" value="100" oninput="App.recalcCalc()"/></div></div>' +
+        '<div id="calc-out" class="calc-out"></div>' +
+      "</div>";
   }
 
   /* ---- Companies (all or by country) ---- */
@@ -2216,6 +2374,7 @@ window.App = window.App || {};
       '<div class="card-actions">' +
         '<button class="btn primary sm" data-action="send-email" data-id="' + c.id + '">✉️ Send email</button>' +
         '<button class="btn sm" data-action="make-offer" data-id="' + c.id + '">💰 Offer</button>' +
+        '<button class="btn sm" data-action="make-docs" data-id="' + c.id + '">📄 Docs</button>' +
         '<button class="btn sm" data-action="find-buyers" data-id="' + c.id + '">👥 More contacts</button>' +
         '<button class="btn sm" data-action="open-thread" data-id="' + c.id + '">📧 Gmail history</button>' +
         '<button class="btn sm" data-action="edit-company" data-id="' + c.id + '">✎ Edit</button>' +
@@ -2314,6 +2473,14 @@ window.App = window.App || {};
         '<div class="field" style="margin-top:10px;"><label>Offer template (email &amp; PDF body)</label><textarea data-set="offerTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.offerTemplate || BUILTIN_OFFER) + "</textarea></div>" +
         '<div class="field"><label>Letter of Intent (LOI) template</label><textarea data-set="loiTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.loiTemplate || BUILTIN_LOI) + "</textarea></div>" +
         '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📑 Trade document templates</h3>' +
+        '<div class="meta">Editable bodies for the Document Vault (📄 Docs on each buyer). Same placeholders as above.</div>' +
+        ["sco", "icpo", "ncnda", "contract"].map(function (k) {
+          var label = { sco: "Soft Corporate Offer (SCO)", icpo: "ICPO", ncnda: "NCNDA", contract: "Sales Contract" }[k];
+          var val = (s.docTemplates && s.docTemplates[k]) || BUILTIN_DOCS[k];
+          return '<div class="field" style="margin-top:10px;"><label>' + label + '</label><textarea data-doc="' + k + '" style="min-height:120px;font-family:monospace;font-size:12px">' + esc(val) + "</textarea></div>";
+        }).join("") +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👥 Team sync (shared data)</h3>' +
         '<div class="meta">Share buyers, statuses and prices with teammates via the proxy. Everyone points at the same proxy URL and turns this on. Last-write-wins — click <strong>Pull</strong> to grab the latest before a big edit. Protect it with a token (proxy <span class="kbd">DATA_AUTH_TOKEN</span>).</div>' +
         '<label class="check" style="margin:12px 0;"><input type="checkbox" data-set-bool="teamSync"' + (s.teamSync ? " checked" : "") + '> Enable team sync</label>' +
@@ -2394,6 +2561,27 @@ window.App = window.App || {};
     openModal("Add a country", body, footer);
   }
 
+  function dealForm(d) {
+    d = d || {};
+    var buyerOpts = '<option value="">— buyer —</option>' + Store.companies().map(function (c) {
+      return '<option value="' + c.id + '"' + (d.buyerId === c.id ? " selected" : "") + ">" + esc(c.name) + "</option>";
+    }).join("");
+    var prodOpts = '<option value="">— product —</option>' + App.PRODUCTS.map(function (p) {
+      return '<option value="' + esc(p.name) + '"' + (d.product === p.name ? " selected" : "") + ">" + esc(p.name) + "</option>";
+    }).join("");
+    var stageOpts = App.STAGES.map(function (s) { return '<option value="' + s.key + '"' + ((d.stage || "lead") === s.key ? " selected" : "") + ">" + esc(s.label) + "</option>"; }).join("");
+    var body =
+      '<div class="field"><label>Title</label><input data-d="title" value="' + esc(d.title || "") + '" placeholder="e.g. 200 MT copper cathode → Aurubis"/></div>' +
+      '<div class="field-2"><div class="field"><label>Buyer</label><select data-d="buyerId">' + buyerOpts + "</select></div>" +
+        '<div class="field"><label>Product</label><select data-d="product">' + prodOpts + "</select></div></div>" +
+      '<div class="field-2"><div class="field"><label>Stage</label><select data-d="stage">' + stageOpts + "</select></div>" +
+        '<div class="field"><label>Value (USD)</label><input type="number" data-d="value" value="' + esc(d.value || "") + '" placeholder="estimated deal value"/></div></div>' +
+      '<div class="field"><label>Notes</label><textarea data-d="notes">' + esc(d.notes || "") + "</textarea></div>";
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-deal" data-id="' + (d.id || "") + '">Save deal</button>';
+    openModal(d.id ? "Edit deal" : "New deal", body, footer);
+  }
+
   function templateForm(t) {
     t = t || {};
     var body =
@@ -2421,6 +2609,71 @@ window.App = window.App || {};
   function applyTpl(tpl, map) {
     return String(tpl || "").replace(/\{\{\w+\}\}/g, function (m) { return map[m] != null ? map[m] : m; });
   }
+
+  var BUILTIN_DOCS = {
+    sco: "SOFT CORPORATE OFFER (SCO)\n\nDate: {{date}}\nSeller: {{myCompany}}\nBuyer: {{buyer}}\n\n" +
+      "We are pleased to offer the following non-ferrous material(s) on a soft-offer basis:\n\n{{lines}}\n\n" +
+      "Price: formula-linked to the prevailing LME, confirmed at contract\nDelivery: {{terms}}\nPayment: {{payment}}\n" +
+      "Validity: {{validity}}\n\nThis SCO is subject to final contract and mutually agreed terms.\n\n{{me}}\n{{myCompany}}",
+    icpo: "IRREVOCABLE CORPORATE PURCHASE ORDER (ICPO)\n\nDate: {{date}}\nBuyer: {{buyer}}\nSeller: {{myCompany}}\n\n" +
+      "The Buyer hereby places an irrevocable corporate purchase order for:\n\n{{lines}}\n\n" +
+      "Delivery: {{terms}}\nPayment: {{payment}}\n\nThis ICPO is issued in good faith pending the Seller's full corporate offer and draft contract.\n\nAuthorised signatory: {{contact}}\n{{buyer}}",
+    ncnda: "NON-CIRCUMVENTION, NON-DISCLOSURE AGREEMENT (NCNDA)\n\nDate: {{date}}\n\n" +
+      "This agreement is entered into between {{myCompany}} and {{buyer}}.\n\n" +
+      "1. Both parties agree not to circumvent, avoid, bypass or obviate each other in any transaction.\n" +
+      "2. Both parties agree to keep confidential all information, contacts and terms exchanged.\n" +
+      "3. This agreement is valid for the duration of the business relationship and 2 years thereafter.\n\n" +
+      "Signed for {{myCompany}}: {{me}}\nSigned for {{buyer}}: {{contact}}",
+    contract: "SALES CONTRACT\n\nContract date: {{date}}\nSeller: {{myCompany}}\nBuyer: {{buyer}}\n\n" +
+      "1. Commodity & quantity:\n{{lines}}\n\n2. Price: formula-linked to LME, confirmed per shipment.\n" +
+      "3. Delivery terms: {{terms}}\n4. Payment: {{payment}}\n5. Inspection: SGS or equivalent at loading.\n" +
+      "6. Validity: {{validity}}\n\nThis contract is binding upon signature by both parties.\n\n" +
+      "Seller: {{me}}, {{myCompany}}\nBuyer: {{contact}}, {{buyer}}"
+  };
+
+  function docMap(c) {
+    var s = Store.settings();
+    var products = (c.materials || []).map(function (id) { var p = App.productById(id); return p ? p.name : null; }).filter(Boolean);
+    return {
+      "{{buyer}}": c.name || "the Buyer",
+      "{{contact}}": c.contactName || "________",
+      "{{lines}}": products.length ? products.map(function (n) { return "  • " + n + " — qty/price on request"; }).join("\n") : "  • (materials on request)",
+      "{{total}}": "on request",
+      "{{terms}}": "CIF (port TBA)",
+      "{{payment}}": "TT / LC at sight",
+      "{{validity}}": "7 days",
+      "{{notes}}": "",
+      "{{me}}": s.senderName || "________",
+      "{{myCompany}}": s.companyName || "________",
+      "{{date}}": new Date().toLocaleDateString(),
+      "{{products}}": products.join(", ")
+    };
+  }
+  function docTemplate(type) {
+    var s = Store.settings();
+    if (type === "offer") return s.offerTemplate || BUILTIN_OFFER;
+    if (type === "loi") return s.loiTemplate || BUILTIN_LOI;
+    return (s.docTemplates && s.docTemplates[type]) || BUILTIN_DOCS[type] || "";
+  }
+  App.fillDoc = function (cid) {
+    var c = Store.companyById(cid); if (!c) return;
+    var type = ($("doc-type") || {}).value;
+    if ($("doc-body")) $("doc-body").value = applyTpl(docTemplate(type), docMap(c));
+  };
+  function docForm(c) {
+    var types = [["offer", "Offer"], ["loi", "Letter of Intent (LOI)"], ["sco", "Soft Corporate Offer (SCO)"], ["icpo", "ICPO"], ["ncnda", "NCNDA"], ["contract", "Sales Contract"]];
+    var sel = types.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + "</option>"; }).join("");
+    var body = '<div class="field"><label>Document type</label><select id="doc-type" onchange="App.fillDoc(\'' + c.id + '\')">' + sel + "</select></div>" +
+      '<div class="field"><label>Preview (edit before sending; templates live in Settings)</label>' +
+      '<textarea id="doc-body" style="min-height:260px;font-family:monospace;font-size:12px"></textarea></div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn" data-action="doc-print" data-id="' + c.id + '">🖨 Print / PDF</button>' +
+      '<button class="btn primary" data-action="doc-email" data-id="' + c.id + '">✉️ Email</button>';
+    openModal("📄 Documents — " + (c.name || ""), body, footer);
+    setTimeout(function () { App.fillDoc(c.id); }, 0);
+  }
+
+  function applyTplPlaceholder() {}
   function offerMap(company, o) {
     var s = Store.settings();
     var lt = offerLinesText(o);
@@ -2820,7 +3073,21 @@ window.App = window.App || {};
       }
 
       case "sheet-add-cat": Store.addSheetCategory("New category"); render(); break;
-      case "sheet-del-cat": {
+      case "add-deal": dealForm(); break;
+      case "edit-deal": dealForm(Store.deals().find(function (d) { return d.id === id; })); break;
+      case "del-deal": if (confirm("Delete this deal?")) { Store.deleteDeal(id); render(); } break;
+      case "save-deal": {
+        var dm = a.closest(".modal");
+        var data = {};
+        dm.querySelectorAll("[data-d]").forEach(function (el) { data[el.getAttribute("data-d")] = el.value; });
+        var b = data.buyerId ? Store.companyById(data.buyerId) : null;
+        data.buyer = b ? b.name : "";
+        if (id) Store.updateDeal(id, data); else Store.addDeal(data);
+        closeModal(); render(); toast(id ? "Deal updated." : "Deal added.");
+        break;
+      }
+      case "add-task": Store.addTask({ text: "New task" }); render(); break;
+      case "del-task": Store.deleteTask(id); render(); break;      case "sheet-del-cat": {
         var cat = a.getAttribute("data-cat");
         if (confirm("Delete this category and its contacts?")) { Store.deleteSheetCategory(cat); render(); }
         break;
@@ -2911,6 +3178,38 @@ window.App = window.App || {};
         break;
 
       case "make-offer": offerForm(company); break;
+      case "make-docs": docForm(company); break;
+      case "doc-email": {
+        var dm2 = a.closest(".modal");
+        var txt = (dm2.querySelector("#doc-body") || {}).value || "";
+        var dtype = (dm2.querySelector("#doc-type") || {}).value || "document";
+        var subj = (Store.settings().companyName || "") + " — " + dtype.toUpperCase() + " — " + (company.name || "");
+        window.open("https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(company.email || "") +
+          "&su=" + encodeURIComponent(subj) + "&body=" + encodeURIComponent(txt), "_blank");
+        Store.updateCompany(id, { lastEmailAt: Date.now() });
+        if (company.status === "red") Store.setStatus(id, "yellow", {});
+        Store.logActivity(id, "doc", dtype.toUpperCase() + " emailed");
+        closeModal(); render(); toast("Opened Gmail with the document.");
+        break;
+      }
+      case "doc-print": {
+        var dm3 = a.closest(".modal");
+        var dtxt = (dm3.querySelector("#doc-body") || {}).value || "";
+        var dt = (dm3.querySelector("#doc-type") || {}).value || "document";
+        var ps2 = Store.settings();
+        var w2 = window.open("", "_blank");
+        if (!w2) { toast("Allow pop-ups to print."); break; }
+        w2.document.write("<html><head><title>" + esc(dt) + " — " + esc(company.name || "") + "</title><style>" +
+          "body{font-family:Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{font-size:20px;margin:0 0 4px}" +
+          ".muted{color:#666;font-size:13px}hr{border:none;border-top:1px solid #ddd;margin:14px 0}" +
+          "pre{white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.5}</style></head><body>" +
+          "<h1>" + esc(ps2.companyName || "") + "</h1><div class='muted'>" + esc(ps2.senderName || "") +
+          (ps2.phone ? " · " + esc(ps2.phone) : "") + (ps2.senderEmail ? " · " + esc(ps2.senderEmail) : "") + "</div><hr>" +
+          "<pre>" + esc(dtxt) + "</pre></body></html>");
+        w2.document.close(); w2.focus(); setTimeout(function () { w2.print(); }, 300);
+        Store.logActivity(id, "doc", dt.toUpperCase() + " printed");
+        break;
+      }
 
       case "email-offer": {
         var mo = a.closest(".modal");
@@ -2997,6 +3296,9 @@ window.App = window.App || {};
           else margins[el.getAttribute("data-margin")] = Number(v);
         });
         patch.margins = margins;
+        var docTemplates = Object.assign({}, Store.settings().docTemplates);
+        sc.querySelectorAll("[data-doc]").forEach(function (el) { docTemplates[el.getAttribute("data-doc")] = el.value; });
+        patch.docTemplates = docTemplates;
         Store.updateSettings(patch); toast("Settings saved.");
         if (App.startLiveTicker) App.startLiveTicker();
         break;
@@ -3193,6 +3495,40 @@ window.App = window.App || {};
   App.onSheetContact = function (catId, contactId, field, value) {
     var patch = {}; patch[field] = value;
     App.Store.updateSheetContact(catId, contactId, patch);
+  };
+  App.onDealStage = function (id, stage) { Store.updateDeal(id, { stage: stage }); render(); };
+  App.onTaskDone = function (id, done) { Store.updateTask(id, { done: done }); render(); };
+  App.onTaskEdit = function (id, field, value) { var p = {}; p[field] = value; Store.updateTask(id, p); };
+
+  App.calcProduct = function () {
+    var sel = $("calc-prod"); if (!sel) return;
+    var base = productBaseUSD(App.productById(sel.value));
+    if (base != null) $("calc-base").value = base;
+    App.recalcCalc();
+  };
+  App.recalcCalc = function () {
+    if (!$("calc-base")) return;
+    var n = function (id) { return Number(($(id) || {}).value) || 0; };
+    var base = n("calc-base"), margin = n("calc-margin"), freight = n("calc-freight"),
+        ins = n("calc-ins"), duty = n("calc-duty"), qty = n("calc-qty");
+    var sell = base * (1 + margin / 100);           // your FOB sell price
+    var cif = sell + freight;
+    var insAmt = cif * ins / 100;
+    var dutyAmt = (cif + insAmt) * duty / 100;
+    var landed = cif + insAmt + dutyAmt;            // buyer's landed cost
+    var profitMT = sell - base;
+    function L(k, v, strong) { return '<div class="calc-row' + (strong ? " strong" : "") + '"><span>' + k + "</span><span>" + Prices.money(v) + "</span></div>"; }
+    $("calc-out").innerHTML =
+      L("Your FOB sell (base + " + margin + "%)", sell) +
+      L("+ Freight", freight) +
+      L("CIF", cif, false) +
+      L("+ Insurance", insAmt) +
+      L("+ Duty", dutyAmt) +
+      L("Buyer landed cost / MT", landed, true) +
+      '<hr style="border:none;border-top:1px solid var(--line);margin:8px 0">' +
+      L("Your profit / MT", profitMT, true) +
+      L("Total deal value (" + qty + " MT)", sell * qty) +
+      L("Total profit (" + qty + " MT)", profitMT * qty, true);
   };
 
   App.onFilter = function (kind, value) {
