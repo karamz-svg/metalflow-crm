@@ -8,7 +8,7 @@ window.App = window.App || {};
   "use strict";
 
   // Bump on each release; shown in the sidebar so you can confirm the live build.
-  App.VERSION = "build 9 · metalflow";
+  App.VERSION = "build 10 · metalflow";
 
   /* ---- Metal groups: drive colour coding + LME price linkage ---- */
   // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
@@ -54,7 +54,15 @@ window.App = window.App || {};
   ];
 
   App.productById = function (id) {
-    return App.PRODUCTS.find(function (p) { return p.id === id; });
+    var p = App.PRODUCTS.find(function (x) { return x.id === id; });
+    if (p) return p;
+    if (App.Store && App.Store.customProducts) return App.Store.customProducts().find(function (x) { return x.id === id; });
+    return undefined;
+  };
+  // 25 built-in products + any custom products the user added.
+  App.allProducts = function () {
+    var custom = (App.Store && App.Store.customProducts) ? App.Store.customProducts() : [];
+    return App.PRODUCTS.concat(custom);
   };
 
   /* ---- The 27 EU member states ---- */

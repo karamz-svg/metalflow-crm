@@ -51,6 +51,7 @@ window.App = window.App || {};
     delayed: false,
     premiums: {},
     fx: null,                   // EUR/USD rate (USD per 1 EUR) for the currency toggle
+    fxRates: {},                // { EUR, GBP, CNY } = units of that currency per 1 USD
     rows: {
       copper:    { value: null, prev: null, premium: null },
       aluminium: { value: null, prev: null, premium: null },
@@ -107,7 +108,9 @@ window.App = window.App || {};
       customCountries: [],
       sheet: [],
       deals: [],
-      tasks: []
+      tasks: [],
+      customProducts: [],
+      priceAlerts: []
     };
   }
 
@@ -129,6 +132,9 @@ window.App = window.App || {};
     if (!s.settings.docTemplates || typeof s.settings.docTemplates !== "object") s.settings.docTemplates = {};
     if (!Array.isArray(s.deals)) s.deals = [];
     if (!Array.isArray(s.tasks)) s.tasks = [];
+    if (!Array.isArray(s.customProducts)) s.customProducts = [];
+    if (!Array.isArray(s.priceAlerts)) s.priceAlerts = [];
+    if (!s.prices.fxRates || typeof s.prices.fxRates !== "object") s.prices.fxRates = {};
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
     // migrate legacy flat sheet rows -> categories with contacts
@@ -308,7 +314,8 @@ window.App = window.App || {};
     // Apply a normalized feed result from the proxy /api/prices endpoint.
     applyPriceFeed: function (d) {
       if (!d) return;
-      var p = load().prices;
+      var st = load();
+      var p = st.prices;
       ["copper", "aluminium", "zinc", "lead", "nickel", "gold"].forEach(function (k) {
         if (d[k] != null && !isNaN(d[k])) {
           var old = p.rows[k] && p.rows[k].value;
@@ -324,6 +331,16 @@ window.App = window.App || {};
             series.push(Number(d[k]));
             series = series.slice(-40);
           }
+          // log a price-move alert if it moved beyond the threshold
+          var thr = Number(st.settings.alertPct) || 2;
+          if (prev != null && Number(prev) !== 0) {
+            var pct = (Number(d[k]) - Number(prev)) / Number(prev) * 100;
+            if (Math.abs(pct) >= thr && Number(d[k]) !== old) {
+              if (!Array.isArray(st.priceAlerts)) st.priceAlerts = [];
+              st.priceAlerts.unshift({ ts: Date.now(), metal: k, pct: Math.round(pct * 100) / 100, from: Number(prev), to: Number(d[k]) });
+              st.priceAlerts = st.priceAlerts.slice(0, 60);
+            }
+          }
           p.rows[k] = Object.assign({}, p.rows[k], { prev: prev, value: Number(d[k]), series: series });
         }
       });
@@ -334,6 +351,7 @@ window.App = window.App || {};
       if (prem.copper != null) p.rows.copper = Object.assign({}, p.rows.copper, { premium: Number(prem.copper) });
       p.premiums = prem;
       if (d.fx != null && !isNaN(d.fx)) p.fx = Number(d.fx);
+      if (d.fxRates && typeof d.fxRates === "object") p.fxRates = Object.assign({}, p.fxRates, d.fxRates);
       if (d.currency) p.currency = d.currency;
       p.delayed = !!d.delayed;
       p.source = d.source || "Live feed";
@@ -467,6 +485,16 @@ window.App = window.App || {};
       if (t) { Object.assign(t, patch); save(); }
     },
     deleteTask: function (id) { var s = load(); s.tasks = (s.tasks || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Custom products + price-alert log ---------- */
+    customProducts: function () { var s = load(); if (!Array.isArray(s.customProducts)) s.customProducts = []; return s.customProducts; },
+    addCustomProduct: function (data) {
+      var s = load(); if (!Array.isArray(s.customProducts)) s.customProducts = [];
+      var p = Object.assign({ id: "cp" + Date.now().toString(36), name: "", metal: "copper", type: "product", unit: "MT", custom: true }, data || {});
+      s.customProducts.push(p); save(); return p;
+    },
+    deleteCustomProduct: function (id) { var s = load(); s.customProducts = (s.customProducts || []).filter(function (x) { return x.id !== id; }); save(); },
+    priceAlerts: function () { var s = load(); if (!Array.isArray(s.priceAlerts)) s.priceAlerts = []; return s.priceAlerts; },
 
     /* ---------- Team sync hooks ---------- */
     setChangeHook: function (fn) { changeHook = fn; },

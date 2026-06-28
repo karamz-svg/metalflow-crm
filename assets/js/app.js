@@ -13,6 +13,8 @@ window.App = window.App || {};
   var query = "";
   var filterStatus = "";   // "", red, yellow, green
   var filterMetal = "";    // "", or a product metal key
+  var globalQ = "";        // global search query
+  var calOffset = 0;       // calendar month offset from current
 
   /* ---------- tiny helpers ---------- */
   function esc(s) {
@@ -77,9 +79,11 @@ window.App = window.App || {};
 
     var live = Store.settings().priceLiveSeconds > 0 ? '<span class="tk-live">● LIVE</span>' : "";
     var delayed = p.delayed ? "delayed/indicative" : "manual";
-    var noFx = (ccy === "EUR" && !p.fx);
-    var ccyToggle = '<button class="btn sm" data-action="toggle-currency" title="Switch USD / EUR">' +
-      (ccy === "EUR" ? "€ EUR" : "$ USD") + (noFx ? " ⚠️" : "") + "</button>";
+    var rates = p.fxRates || {};
+    var noFx = (ccy !== "USD" && !rates[ccy] && !(ccy === "EUR" && p.fx));
+    var symMap = { USD: "$ USD", EUR: "€ EUR", GBP: "£ GBP", CNY: "¥ CNY" };
+    var ccyToggle = '<button class="btn sm" data-action="toggle-currency" title="Cycle USD / EUR / GBP / CNY">' +
+      (symMap[ccy] || "$ USD") + (noFx ? " ⚠️" : "") + "</button>";
     var warn = App.priceMsg
       ? '<span class="price-warn" data-nav="settings" title="Open price settings">⚠️ ' + esc(App.priceMsg) + "</span>"
       : (!p.updatedAt ? '<span class="price-warn" data-nav="settings">⚠️ set up live prices</span>' : "");
@@ -111,12 +115,17 @@ window.App = window.App || {};
       item("companies", null, "🏢", "All buyers", companies.length) +
       item("pipeline", null, "📈", "Pipeline", Store.deals().length || null) +
       item("shipments", null, "🚢", "Shipments") +
+      item("markets", null, "💹", "Markets") +
       item("reports", null, "📊", "Reports") +
+      item("calendar", null, "🗓️", "Calendar") +
       item("tasks", null, "✅", "Tasks", (Store.tasks().filter(function (t) { return !t.done; }).length) || null) +
       item("sheet", null, "📂", "Custom sheet", Store.sheetCategories().length || null) +
       item("calc", null, "🧮", "Calculator") +
-      item("products", null, "🪙", "Products", App.PRODUCTS.length) +
+      item("products", null, "🪙", "Products", App.allProducts().length) +
       item("settings", null, "⚙️", "Settings");
+
+    var search = '<div class="nav-search"><input placeholder="🔎 Search everything…" value="' + esc(globalQ) +
+      '" oninput="App.onGlobalSearch(this.value)"/></div>';
 
     function countWith(code) { return companies.filter(function (x) { return x.country === code; }).length; }
 
@@ -131,6 +140,7 @@ window.App = window.App || {};
       '<div class="nav-item" data-action="add-country"><span>＋</span><span>Add country</span></div></div>';
 
     $("nav").innerHTML =
+      search +
       '<div class="nav-section">' + top + "</div>" +
       euSection + mySection +
       '<div class="nav-version" title="Live build version">' + esc(App.VERSION || "") + "</div>";
@@ -148,7 +158,10 @@ window.App = window.App || {};
     else if (route.view === "sheet") c.innerHTML = viewSheet();
     else if (route.view === "pipeline") c.innerHTML = viewPipeline();
     else if (route.view === "shipments") c.innerHTML = viewShipments();
+    else if (route.view === "markets") c.innerHTML = viewMarkets();
     else if (route.view === "reports") c.innerHTML = viewReports();
+    else if (route.view === "calendar") c.innerHTML = viewCalendar();
+    else if (route.view === "search") c.innerHTML = viewSearch();
     else if (route.view === "tasks") c.innerHTML = viewTasks();
     else if (route.view === "calc") c.innerHTML = viewCalc();
     else if (route.view === "settings") c.innerHTML = viewSettings();
@@ -231,7 +244,8 @@ window.App = window.App || {};
           var arrow = m.pct >= 0 ? "▲" : "▼";
           var lbl = (App.METALS[m.key === "nickel" ? "stainless" : m.key] || {}).label || m.key;
           return '<span class="alert-chip" data-action="alert-filter" data-metal="' + pm + '">' +
-            esc(lbl) + " " + arrow + Math.abs(m.pct).toFixed(1) + "% · " + n + " buyers</span>";
+            esc(lbl) + " " + arrow + Math.abs(m.pct).toFixed(1) + "% · " + n + " buyers</span>" +
+            (n ? '<span class="alert-chip mail" data-action="email-metal" data-metal="' + pm + '" title="Open drafts for these buyers">✉️ email all</span>' : "");
         }).join(" ") + "</div>"
       : "";
 
@@ -270,15 +284,16 @@ window.App = window.App || {};
       '<div class="l"><span class="dot" style="background:var(--' + color + ')"></span> ' + esc(l) + "</div></div>";
   }
 
-  /* ---- Products ---- */
+  /* ---- Products (+ custom catalog editor) ---- */
   function viewProducts() {
     var groups = {};
-    App.PRODUCTS.forEach(function (p) { (groups[p.metal] = groups[p.metal] || []).push(p); });
+    App.allProducts().forEach(function (p) { (groups[p.metal] = groups[p.metal] || []).push(p); });
     var html = Object.keys(groups).map(function (mk) {
       var m = metal(mk);
       var items = groups[mk].map(function (p) {
         return '<div class="tag"><span class="swatch" style="background:' + m.color + '"></span>' +
-          esc(p.name) + ' <small style="color:var(--muted)">· ' + esc(p.type) + "</small></div>";
+          esc(p.name) + ' <small style="color:var(--muted)">· ' + esc(p.type) + "</small>" +
+          (p.custom ? ' <span class="del-prod" data-action="del-product" data-id="' + p.id + '" title="Remove">✕</span>' : "") + "</div>";
       }).join("");
       return '<div class="card"><h3><span class="dot" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' +
         m.color + ';margin-right:7px;"></span>' + esc(m.label) + "</h3>" +
@@ -288,7 +303,8 @@ window.App = window.App || {};
     }).join("");
 
     return '<div class="page-head"><div><h2>Your Products</h2>' +
-      '<div class="sub">25 non-ferrous products, grouped by base metal &amp; pricing source.</div></div></div>' +
+      '<div class="sub">Non-ferrous catalog grouped by base metal &amp; pricing source. Add your own below.</div></div>' +
+      '<div class="spacer"></div><button class="btn primary" data-action="add-product">+ Add product</button></div>' +
       '<div class="grid cards">' + html + "</div>";
   }
 
@@ -426,6 +442,86 @@ window.App = window.App || {};
       "</div>";
   }
 
+  /* ---- Markets: charts + price-alert log ---- */
+  function viewMarkets() {
+    var p = Store.prices();
+    var ccy = Store.settings().displayCurrency || "USD";
+    var cards = App.PRICE_ROWS.filter(function (r) { return r.metal !== "iron"; }).map(function (r) {
+      var row = p.rows[r.key] || {};
+      if (row.value == null) return "";
+      var pct = Prices.changePct(row);
+      var col = pct == null ? "#8b97a6" : (pct >= 0 ? "#46d07f" : "#ef5a5a");
+      var chg = pct == null ? "" : ' <span style="color:' + col + '">' + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%</span>";
+      return '<div class="card"><h3>' + esc(r.label) + "</h3>" +
+        '<div style="font-size:24px;font-weight:700;font-family:ui-monospace,monospace">' + Prices.money(row.value) + chg + "</div>" +
+        '<div style="margin-top:8px">' + (Prices.sparkline(row.series, col, 280, 70) || '<span class="status-text">no history yet</span>') + "</div>" +
+        (r.hasPremium && row.premium != null ? '<div class="status-text">premium: ' + Prices.money(row.premium) + "/MT</div>" : "") + "</div>";
+    }).join("");
+    var alerts = Store.priceAlerts();
+    var log = alerts.length ? alerts.slice(0, 30).map(function (a) {
+      var up = a.pct >= 0;
+      return '<div class="al-row"><span>' + esc(new Date(a.ts).toLocaleString()) + "</span>" +
+        "<span><strong>" + esc((App.METALS[a.metal === "nickel" ? "stainless" : a.metal] || {}).label || a.metal) + "</strong> " +
+        '<span style="color:' + (up ? "#46d07f" : "#ef5a5a") + '">' + (up ? "▲" : "▼") + Math.abs(a.pct).toFixed(2) + "%</span> " +
+        Prices.money(a.from) + " → " + Prices.money(a.to) + "</span></div>";
+    }).join("") : '<div class="status-text">No alerts logged yet. They appear when a metal moves more than your threshold (Settings → alertPct).</div>';
+
+    return '<div class="page-head"><div><h2>Markets</h2><div class="sub">Live charts (' + ccy + ') + price-move alert log.</div></div>' +
+      '<div class="spacer"></div><button class="btn sm" data-action="refresh-prices">↻ Refresh</button></div>' +
+      '<div class="grid cards">' + (cards || '<div class="status-text">No prices yet — refresh on the top bar.</div>') + "</div>" +
+      '<h3 style="margin:18px 0 10px">⚡ Price-move alerts</h3><div class="card">' + log + "</div>";
+  }
+
+  /* ---- Calendar: tasks, follow-ups, shipment ETAs ---- */
+  function viewCalendar() {
+    var base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + calOffset);
+    var year = base.getFullYear(), month = base.getMonth();
+    var first = new Date(year, month, 1), startDow = (first.getDay() + 6) % 7; // Monday-first
+    var days = new Date(year, month + 1, 0).getDate();
+    var ev = {}; // 'YYYY-M-D' -> [{type,text}]
+    function add(d, type, text) { if (!d) return; var k = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); (ev[k] = ev[k] || []).push({ type: type, text: text }); }
+    Store.tasks().forEach(function (t) { if (t.due && !t.done) add(new Date(t.due), "task", "✅ " + (t.text || "task")); });
+    Store.deals().forEach(function (d) { if (d.eta) add(new Date(d.eta), "ship", "🚢 " + (d.title || "ETA")); });
+    var fd = (Number(Store.settings().followUpDays) || 4) * 86400000;
+    Store.companies().forEach(function (c) { if (c.status === "yellow" && c.lastEmailAt) add(new Date(c.lastEmailAt + fd), "follow", "📧 " + c.name); });
+
+    var cells = "";
+    for (var i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
+    for (var day = 1; day <= days; day++) {
+      var k = year + "-" + month + "-" + day;
+      var list = (ev[k] || []).map(function (e) { return '<div class="cal-ev ' + e.type + '">' + esc(e.text) + "</div>"; }).join("");
+      var today = new Date(); var isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+      cells += '<div class="cal-cell' + (isToday ? " today" : "") + '"><div class="cal-d">' + day + "</div>" + list + "</div>";
+    }
+    var dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+    var title = base.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    return '<div class="page-head"><div><h2>Calendar</h2><div class="sub">Tasks, follow-ups &amp; shipment ETAs.</div></div>' +
+      '<div class="spacer"></div><button class="btn sm" data-action="cal-prev">‹</button><span style="padding:0 10px;font-weight:700">' + esc(title) +
+      '</span><button class="btn sm" data-action="cal-next">›</button></div>' +
+      '<div class="cal-grid">' + dow + cells + "</div>";
+  }
+
+  /* ---- Global search ---- */
+  function viewSearch() {
+    var q = globalQ.trim().toLowerCase();
+    if (!q) return '<div class="empty"><div class="big">🔎</div><p>Type in the search box to find buyers, deals, tasks and contacts.</p></div>';
+    function hit(s) { return (s || "").toLowerCase().indexOf(q) !== -1; }
+    var buyers = Store.companies().filter(function (c) { return hit(c.name) || hit(c.email) || hit(c.city) || hit(c.contactName); });
+    var deals = Store.deals().filter(function (d) { return hit(d.title) || hit(d.buyer) || hit(d.product); });
+    var tasks = Store.tasks().filter(function (t) { return hit(t.text); });
+    var contacts = [];
+    Store.sheetCategories().forEach(function (cat) { (cat.contacts || []).forEach(function (ct) { if (hit(ct.name) || hit(ct.company) || hit(ct.email)) contacts.push({ cat: cat.name, ct: ct }); }); });
+    function sect(title, items) { return items ? '<div class="card"><h3>' + title + "</h3>" + items + "</div>" : ""; }
+    var bH = buyers.map(function (c) { return '<div class="srch" data-nav="country:' + c.country + '">🏢 ' + esc(c.name) + ' <span class="status-text">' + esc((App.countryByCode(c.country) || {}).name || "") + "</span></div>"; }).join("");
+    var dH = deals.map(function (d) { return '<div class="srch" data-nav="pipeline">📈 ' + esc(d.title || "(deal)") + ' <span class="status-text">' + esc(App.stageLabel(d.stage)) + "</span></div>"; }).join("");
+    var tH = tasks.map(function (t) { return '<div class="srch" data-nav="tasks">✅ ' + esc(t.text) + "</div>"; }).join("");
+    var cH = contacts.map(function (x) { return '<div class="srch" data-nav="sheet">📂 ' + esc(x.ct.name || x.ct.company) + ' <span class="status-text">' + esc(x.cat) + "</span></div>"; }).join("");
+    var total = buyers.length + deals.length + tasks.length + contacts.length;
+    return '<div class="page-head"><div><h2>Search: “' + esc(globalQ) + '”</h2><div class="sub">' + total + " results</div></div></div>" +
+      (total ? sect("Buyers (" + buyers.length + ")", bH) + sect("Deals (" + deals.length + ")", dH) + sect("Tasks (" + tasks.length + ")", tH) + sect("Sheet contacts (" + contacts.length + ")", cH)
+        : '<div class="empty"><div class="big">🤷</div><p>No matches for “' + esc(globalQ) + '”.</p></div>');
+  }
+
   /* ---- Tasks ---- */
   function viewTasks() {
     var tasks = Store.tasks().slice().sort(function (a, b) {
@@ -450,7 +546,7 @@ window.App = window.App || {};
 
   /* ---- Landed-cost / margin calculator ---- */
   function viewCalc() {
-    var prodOpts = App.PRODUCTS.map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + "</option>"; }).join("");
+    var prodOpts = App.allProducts().map(function (p) { return '<option value="' + p.id + '">' + esc(p.name) + "</option>"; }).join("");
     return '<div class="page-head"><div><h2>Landed-cost / margin calculator</h2>' +
       '<div class="sub">Turn a live metal price into your CIF / landed cost and profit per tonne.</div></div></div>' +
       '<div class="card" style="max-width:560px">' +
@@ -686,7 +782,7 @@ window.App = window.App || {};
         "</div></div>" +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📊 Offer margins</h3>' +
         '<div class="meta">Your margin % over the live metal price, used by the offer generator. Use negative values for scrap discounts.</div>' +
-        '<div class="margins">' + App.PRODUCTS.map(function (pp) {
+        '<div class="margins">' + App.allProducts().map(function (pp) {
           var v = (s.margins && s.margins[pp.id] != null) ? s.margins[pp.id] : "";
           return '<label class="mg"><span>' + esc(pp.name) + '</span><input type="number" step="0.1" data-margin="' + pp.id + '" value="' + esc(v) + '" placeholder="0"/></label>';
         }).join("") + "</div>" +
@@ -743,7 +839,7 @@ window.App = window.App || {};
     var countryOpts = App.allCountries().map(function (x) {
       return '<option value="' + x.code + '"' + (c.country === x.code ? " selected" : "") + ">" + x.flag + " " + esc(x.name) + "</option>";
     }).join("");
-    var checks = App.PRODUCTS.map(function (p) {
+    var checks = App.allProducts().map(function (p) {
       var on = (c.materials || []).indexOf(p.id) !== -1;
       var m = metal(p.metal);
       return '<label class="check"><input type="checkbox" data-mat="' + p.id + '"' + (on ? " checked" : "") + ">" +
@@ -792,12 +888,24 @@ window.App = window.App || {};
     openModal("Add a country", body, footer);
   }
 
+  function productForm() {
+    var metalOpts = Object.keys(App.METALS).map(function (mk) { return '<option value="' + mk + '">' + esc(App.METALS[mk].label) + "</option>"; }).join("");
+    var typeOpts = ["primary", "scrap", "compound", "product"].map(function (t) { return '<option value="' + t + '">' + t + "</option>"; }).join("");
+    var body = '<div class="field"><label>Product name</label><input data-p="name" placeholder="e.g. Tin ingot 99.9%, Limestone, Manganese ore"/></div>' +
+      '<div class="field-2"><div class="field"><label>Base metal (for pricing)</label><select data-p="metal">' + metalOpts + "</select></div>" +
+      '<div class="field"><label>Type</label><select data-p="type">' + typeOpts + "</select></div></div>" +
+      '<div class="meta">It appears in buyer materials, deals, offers, margins &amp; the calculator.</div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-product">Add product</button>';
+    openModal("Add product", body, footer);
+  }
+
   function dealForm(d) {
     d = d || {};
     var buyerOpts = '<option value="">— buyer —</option>' + Store.companies().map(function (c) {
       return '<option value="' + c.id + '"' + (d.buyerId === c.id ? " selected" : "") + ">" + esc(c.name) + "</option>";
     }).join("");
-    var prodOpts = '<option value="">— product —</option>' + App.PRODUCTS.map(function (p) {
+    var prodOpts = '<option value="">— product —</option>' + App.allProducts().map(function (p) {
       return '<option value="' + esc(p.name) + '"' + (d.product === p.name ? " selected" : "") + ">" + esc(p.name) + "</option>";
     }).join("");
     var stageOpts = App.STAGES.map(function (s) { return '<option value="' + s.key + '"' + ((d.stage || "lead") === s.key ? " selected" : "") + ">" + esc(s.label) + "</option>"; }).join("");
@@ -1317,6 +1425,16 @@ window.App = window.App || {};
 
       case "sheet-add-cat": Store.addSheetCategory("New category"); render(); break;
       case "add-deal": dealForm(); break;
+      case "add-product": productForm(); break;
+      case "save-product": {
+        var pmodal = a.closest(".modal");
+        var pd = {};
+        pmodal.querySelectorAll("[data-p]").forEach(function (el) { pd[el.getAttribute("data-p")] = el.value; });
+        if (!pd.name) { toast("Enter a product name."); break; }
+        Store.addCustomProduct(pd); closeModal(); render(); toast("Product added.");
+        break;
+      }
+      case "del-product": Store.deleteCustomProduct(id); render(); break;
       case "edit-deal": dealForm(Store.deals().find(function (d) { return d.id === id; })); break;
       case "del-deal": if (confirm("Delete this deal?")) { Store.deleteDeal(id); render(); } break;
       case "save-deal": {
@@ -1420,6 +1538,27 @@ window.App = window.App || {};
         render();
         break;
 
+      case "email-metal": {
+        var pm = a.getAttribute("data-metal") || "";
+        var buyers = Store.companies().filter(function (c) {
+          return c.email && (c.materials || []).some(function (mid) { var pp = App.productById(mid); return pp && pp.metal === pm; });
+        });
+        if (!buyers.length) { toast("No buyers with an email buy that metal."); break; }
+        var cap = Math.min(buyers.length, 8);
+        if (!confirm("Open " + cap + " Gmail drafts" + (buyers.length > cap ? " (first " + cap + " of " + buyers.length + ")" : "") + "?")) break;
+        buyers.slice(0, cap).forEach(function (c) {
+          window.open(Email.composeUrl(c), "_blank");
+          Store.updateCompany(c.id, { lastEmailAt: Date.now() });
+          if (c.status === "red") Store.setStatus(c.id, "yellow", {});
+          Store.logActivity(c.id, "email", "Price-move outreach");
+        });
+        render(); toast("Opened " + cap + " drafts.");
+        break;
+      }
+
+      case "cal-prev": calOffset--; render(); break;
+      case "cal-next": calOffset++; render(); break;
+
       case "make-offer": offerForm(company); break;
       case "make-docs": docForm(company); break;
       case "doc-email": {
@@ -1504,13 +1643,15 @@ window.App = window.App || {};
 
       case "toggle-currency": {
         var cur = Store.settings().displayCurrency || "USD";
-        var next = cur === "USD" ? "EUR" : "USD";
+        var order = ["USD", "EUR", "GBP", "CNY"];
+        var next = order[(order.indexOf(cur) + 1) % order.length];
         Store.updateSettings({ displayCurrency: next });
         renderPriceBar();
-        if (next === "EUR" && !Store.prices().fx) {
-          toast("Fetching EUR rate…");
-          Prices.fetchLive(true).then(function (d) { if (d) { Store.applyPriceFeed(d); renderPriceBar(); } }).catch(function () {});
-        }
+        var rates = Store.prices().fxRates || {};
+        if (next !== "USD" && !rates[next] && !(next === "EUR" && Store.prices().fx)) {
+          toast("Fetching " + next + " rate…");
+          Prices.fetchLive(true).then(function (d) { if (d) { Store.applyPriceFeed(d); render(); } }).catch(function () {});
+        } else { render(); }
         break;
       }
 
@@ -1741,6 +1882,11 @@ window.App = window.App || {};
   };
   App.onDealStage = function (id, stage) { Store.updateDeal(id, { stage: stage }); render(); };
   App.onShip = function (id, field, value) { var p = {}; p[field] = value; Store.updateDeal(id, p); };
+  App.onGlobalSearch = function (v) {
+    globalQ = v;
+    if (route.view !== "search") route = { view: "search", country: null };
+    $("content").innerHTML = viewSearch();
+  };
   App.onTaskDone = function (id, done) { Store.updateTask(id, { done: done }); render(); };
   App.onTaskEdit = function (id, field, value) { var p = {}; p[field] = value; Store.updateTask(id, p); };
 

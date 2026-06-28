@@ -368,3 +368,33 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .btn.wa:hover { border-color: #25d366; }
 .person-wa { cursor: pointer; font-size: 14px; text-decoration: none; }
 .person-wa:hover { transform: scale(1.15); }
+
+
+/* ---------- Nav search ---------- */
+.nav-search { padding: 4px 8px 10px; }
+.nav-search input { width: 100%; background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
+.nav-search input:focus { outline: none; border-color: var(--accent-2); }
+
+/* ---------- Markets ---------- */
+.al-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.al-row:last-child { border-bottom: none; }
+.al-row span:first-child { color: var(--muted); font-size: 12px; }
+
+/* ---------- Calendar ---------- */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 4px; text-align: center; }
+.cal-cell { min-height: 84px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 5px; }
+.cal-cell.empty { background: transparent; border: none; }
+.cal-cell.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-d { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.cal-ev { font-size: 10.5px; border-radius: 5px; padding: 2px 5px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-ev.task { background: #243a52; color: #bcd; }
+.cal-ev.ship { background: #14323f; color: #8fd; }
+.cal-ev.follow { background: #3a2f16; color: #f0d79a; }
+
+/* ---------- Search results ---------- */
+.srch { padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.srch:hover { background: var(--panel-2); }
+.srch:last-child { border-bottom: none; }
+.del-prod { cursor: pointer; color: var(--muted); margin-left: 4px; }
+.del-prod:hover { color: var(--red); }

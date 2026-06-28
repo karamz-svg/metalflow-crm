@@ -16,12 +16,15 @@ window.App = window.App || {};
     toDisplay: function (usd) {
       if (usd == null || isNaN(usd)) return null;
       var s = App.Store.settings();
-      var fx = App.Store.prices().fx;
-      if (s.displayCurrency === "EUR" && fx) return Number(usd) / Number(fx);
-      return Number(usd);
+      var ccy = s.displayCurrency || "USD";
+      if (ccy === "USD") return Number(usd);
+      var rates = App.Store.prices().fxRates || {};
+      if (rates[ccy]) return Number(usd) * rates[ccy];        // units of ccy per USD
+      if (ccy === "EUR" && App.Store.prices().fx) return Number(usd) / Number(App.Store.prices().fx); // legacy
+      return null; // no rate yet
     },
     currencySymbol: function () {
-      return App.Store.settings().displayCurrency === "EUR" ? "€" : "$";
+      return { USD: "$", EUR: "€", GBP: "£", CNY: "¥" }[App.Store.settings().displayCurrency] || "$";
     },
     // Formatted money in the display currency, e.g. "€8,540".
     money: function (usd) {
@@ -53,9 +56,10 @@ window.App = window.App || {};
     },
 
     // Tiny inline SVG sparkline from a series of numbers.
-    sparkline: function (series, color) {
+    sparkline: function (series, color, w, h) {
       if (!series || series.length < 2) return "";
-      var w = 74, h = 22, n = series.length;
+      w = w || 74; h = h || 22;
+      var n = series.length;
       var min = Math.min.apply(null, series), max = Math.max.apply(null, series);
       var range = (max - min) || 1;
       var pts = series.map(function (v, i) {
@@ -131,7 +135,9 @@ window.App = window.App || {};
         { k: "gold", sym: "GC=F", mult: 1 },         // USD / troy oz
         { k: "copper", sym: "HG=F", mult: 2204.62 }, // COMEX USD/lb -> USD/MT
         { k: "aluminium", sym: "ALI=F", mult: 1 },   // USD / MT
-        { k: "fx", sym: "EURUSD=X", mult: 1, fx: true } // USD per 1 EUR
+        { k: "fx", sym: "EURUSD=X", mult: 1, fx: true },   // USD per 1 EUR
+        { k: "fxgbp", sym: "GBPUSD=X", mult: 1, fxc: "GBP", inv: true }, // USD per 1 GBP -> invert
+        { k: "fxcny", sym: "CNY=X", mult: 1, fxc: "CNY", inv: false }   // CNY per 1 USD
       ];
       function getJson(url) {
         var i = 0;
@@ -143,15 +149,17 @@ window.App = window.App || {};
         }
         return attempt();
       }
-      var out = { currency: "USD", source: "Free web feed (Yahoo Finance, delayed)", asOf: Date.now(), delayed: true, prevs: {}, series: {} };
+      var out = { currency: "USD", source: "Free web feed (Yahoo Finance, delayed)", asOf: Date.now(), delayed: true, prevs: {}, series: {}, fxRates: {} };
       return Promise.all(defs.map(function (d) {
         var url = Y + d.sym + "?interval=1d&range=5d";
         return getJson(url).then(function (j) {
           var res = j && j.chart && j.chart.result && j.chart.result[0];
           var meta = res && res.meta;
           if (!meta || meta.regularMarketPrice == null) return;
-          if (d.fx) { out.fx = Number(meta.regularMarketPrice); return; }
-          out[d.k] = Math.round(meta.regularMarketPrice * d.mult);
+          var val = Number(meta.regularMarketPrice);
+          if (d.fx) { out.fx = val; out.fxRates.EUR = 1 / val; return; }
+          if (d.fxc) { out.fxRates[d.fxc] = d.inv ? 1 / val : val; return; }
+          out[d.k] = Math.round(val * d.mult);
           var pc = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
           if (pc != null) out.prevs[d.k] = Math.round(pc * d.mult);
           var q = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
