@@ -1,0 +1,3162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Metals Trading CRM</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪙</text></svg>" />
+  <style>
+/* ============================================================
+   Metals Trading CRM — styles (no framework, fully offline)
+   ============================================================ */
+:root {
+  --bg: #0f1620;
+  --bg-2: #16202d;
+  --panel: #1b2735;
+  --panel-2: #223145;
+  --line: #2c3e54;
+  --text: #e7eef6;
+  --muted: #93a4b8;
+  --accent: #f5a623;
+  --accent-2: #3b9ae1;
+  --red: #e5484d;
+  --yellow: #f5b915;
+  --green: #30a46c;
+  --radius: 12px;
+  --shadow: 0 6px 22px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(1200px 600px at 80% -10%, #1d2c3e 0%, var(--bg) 60%);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---------- Layout ---------- */
+.app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.sidebar {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  padding: 16px 12px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.main { display: flex; flex-direction: column; min-width: 0; }
+.content { padding: 18px 22px 60px; }
+
+/* ---------- Brand ---------- */
+.brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 16px; }
+.brand .logo {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), #c2703d);
+  display: grid; place-items: center; font-weight: 800; color: #1a1206;
+}
+.brand h1 { font-size: 15px; margin: 0; line-height: 1.1; }
+.brand small { color: var(--muted); font-size: 11px; }
+
+/* ---------- Nav ---------- */
+.nav-section { margin-top: 10px; }
+.nav-section .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; padding: 8px 10px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; border-radius: 9px; cursor: pointer; color: var(--text);
+  font-size: 13.5px; user-select: none;
+}
+.nav-item:hover { background: var(--panel); }
+.nav-item.active { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.nav-item .count {
+  margin-left: auto; background: var(--panel-2); color: var(--muted);
+  border-radius: 999px; font-size: 11px; padding: 1px 8px;
+}
+.nav-item.active .count { background: var(--accent); color: #1a1206; }
+
+/* ---------- Price bar (pinned top) ---------- */
+.pricebar {
+  position: sticky; top: 0; z-index: 20;
+  background: linear-gradient(180deg, #10171f, #0c1219);
+  border-bottom: 1px solid var(--line);
+  padding: 0; display: flex; align-items: stretch; gap: 0;
+}
+.pricebar .pb-title { font-weight: 700; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* horizontal trading-desk ticker */
+.ticker { display: flex; flex: 1; overflow-x: auto; align-items: stretch; }
+.ticker::-webkit-scrollbar { height: 6px; }
+.ticker::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.tk {
+  padding: 12px 20px 11px; min-width: 150px; flex: 0 0 auto;
+  border-right: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; justify-content: center; gap: 3px;
+}
+.tk-label { font-size: 11px; letter-spacing: .06em; color: #8b97a6; text-transform: uppercase; white-space: nowrap; }
+.tk-price {
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 21px; font-weight: 700; color: #f3f6fa; white-space: nowrap; line-height: 1.1;
+}
+.tk-chg { font-family: inherit; font-size: 12.5px; font-weight: 700; margin-left: 4px; }
+.tk-chg.up { color: #46d07f; }
+.tk-chg.down { color: #ef5a5a; }
+.tk-chg.flat { color: #8b97a6; }
+.tk-sub { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #6f7c8b; white-space: nowrap; }
+.tk-foot { display: flex; align-items: center; gap: 8px; }
+.tk-spark { display: block; opacity: .9; }
+.tk-spark-empty { width: 74px; height: 22px; display: inline-block; }
+.pb-meta { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-left: 1px solid var(--line); }
+.tk-live { color: #46d07f; font-size: 11px; font-weight: 700; letter-spacing: .05em; animation: pulse 1.6s infinite; }
+.chip {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 11px; display: flex; flex-direction: column; min-width: 96px;
+}
+.chip .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.chip .v { font-size: 15px; font-weight: 700; }
+.chip .v small { font-size: 10px; color: var(--muted); font-weight: 500; }
+.chip.premium { border-color: #4a6; }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.pb-meta { color: var(--muted); font-size: 11.5px; display: flex; align-items: center; gap: 10px; }
+.price-warn { color: var(--yellow); cursor: pointer; text-decoration: underline dotted; }
+.price-warn:hover { color: #ffd35c; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 9px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+  transition: .12s; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent-2); }
+.btn.primary { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 700; }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; }
+.btn.danger:hover { border-color: var(--red); color: var(--red); }
+.btn.sm { padding: 5px 9px; font-size: 12px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Page header ---------- */
+.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.page-head h2 { margin: 0; font-size: 20px; }
+.page-head .sub { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.search {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 8px 12px; min-width: 220px;
+}
+
+/* ---------- Cards / grid ---------- */
+.grid { display: grid; gap: 14px; }
+.grid.cards { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; box-shadow: var(--shadow);
+}
+.card h3 { margin: 0 0 2px; font-size: 15px; }
+.card .meta { color: var(--muted); font-size: 12.5px; }
+
+/* ---------- Tiles (dashboard / countries) ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.tile {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; cursor: pointer; transition: .12s; display: flex; align-items: center; gap: 12px;
+}
+.tile:hover { transform: translateY(-2px); border-color: var(--accent-2); }
+.tile .flag { font-size: 26px; }
+.tile .tname { font-weight: 600; }
+.tile .tsub { color: var(--muted); font-size: 12px; }
+.tile .mini-lights { margin-left: auto; display: flex; gap: 4px; }
+.mini-dot { width: 9px; height: 9px; border-radius: 50%; opacity: .85; }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-bottom: 18px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.stat .n { font-size: 26px; font-weight: 800; }
+.stat .l { color: var(--muted); font-size: 12.5px; }
+
+/* ---------- Tags / chips ---------- */
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.tag {
+  font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg-2);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.tag .swatch { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ---------- Traffic lights ---------- */
+.lights { display: flex; gap: 6px; align-items: center; }
+.light {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid var(--line); background: #1a2433; cursor: pointer; position: relative;
+  transition: .12s;
+}
+.light:hover { transform: scale(1.08); }
+.light.on.red { background: var(--red); border-color: var(--red); box-shadow: 0 0 10px rgba(229,72,77,.6); }
+.light.on.yellow { background: var(--yellow); border-color: var(--yellow); box-shadow: 0 0 10px rgba(245,185,21,.6); }
+.light.on.green { background: var(--green); border-color: var(--green); box-shadow: 0 0 10px rgba(48,164,108,.6); }
+.status-line { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.status-text { font-size: 12px; color: var(--muted); }
+.reply-badge {
+  background: var(--green); color: #04140c; font-weight: 700; font-size: 11px;
+  padding: 2px 9px; border-radius: 999px; cursor: pointer; animation: pulse 1.6s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+.contact-line { color: var(--muted); font-size: 12.5px; margin: 2px 0; display: flex; gap: 7px; align-items: center; }
+.card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+/* ---------- Modal ---------- */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(4,8,14,.66); backdrop-filter: blur(2px);
+  display: grid; place-items: center; z-index: 50; padding: 20px;
+}
+.modal {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px;
+  width: min(640px, 100%); max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow);
+}
+.modal header { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; }
+.modal header h3 { margin: 0; font-size: 16px; }
+.modal .body { padding: 18px; }
+.modal footer { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+.x { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 20px; background: none; border: none; }
+
+/* ---------- Forms ---------- */
+.field { margin-bottom: 13px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.field input, .field select, .field textarea {
+  width: 100%; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 9px 11px; font-size: 13.5px; font-family: inherit;
+}
+.field textarea { resize: vertical; min-height: 70px; }
+.field-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: 9px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.check input { width: auto; }
+
+/* ---------- Misc ---------- */
+.empty { text-align: center; color: var(--muted); padding: 50px 20px; }
+.empty .big { font-size: 40px; margin-bottom: 8px; }
+.notice { background: #1d2c1f; border: 1px solid #2f6b43; color: #bfe6cc; padding: 10px 13px; border-radius: 10px; font-size: 12.5px; margin-bottom: 14px; }
+.notice.warn { background: #2c241a; border-color: #6b5330; color: #e8d4b0; }
+.kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 11px; }
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--accent-2); color: var(--text);
+  padding: 11px 18px; border-radius: 10px; box-shadow: var(--shadow); z-index: 99; font-size: 13px;
+}
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; align-items: center; }
+.legend .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+}
+
+
+/* ---------- People (Apollo contacts) ---------- */
+.people { margin: 10px 0 4px; border-top: 1px dashed var(--line); padding-top: 9px; }
+.people-h { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; display: flex; align-items: center; }
+.people-refresh { margin-left: auto; cursor: pointer; color: var(--accent-2); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.people-refresh:hover { text-decoration: underline; }
+.person {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: var(--bg-2);
+}
+.person .p-name { font-weight: 600; font-size: 13px; }
+.person .p-title { grid-column: 1; color: var(--muted); font-size: 12px; }
+.person .p-email { grid-column: 1; color: var(--accent-2); font-size: 12px; word-break: break-all; }
+.person .p-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; align-items: center; gap: 8px; }
+.person-mail, .person-del, .person-locked, .person-thread { cursor: pointer; font-size: 14px; }
+.person-del { color: var(--muted); }
+.person-del:hover { color: var(--red); }
+.person-mail:hover, .person-thread:hover { transform: scale(1.15); }
+
+/* per-person mini traffic lights */
+.plights { display: inline-flex; gap: 3px; margin-right: 4px; vertical-align: middle; }
+.plight { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--line); background: #1a2433; cursor: pointer; padding: 0; }
+.plight:hover { transform: scale(1.18); }
+.plight.on.red { background: var(--red); border-color: var(--red); }
+.plight.on.yellow { background: var(--yellow); border-color: var(--yellow); }
+.plight.on.green { background: var(--green); border-color: var(--green); box-shadow: 0 0 6px rgba(48,164,108,.55); }
+
+/* ---------- People picker modal ---------- */
+.pick-list { display: flex; flex-direction: column; gap: 8px; }
+.pick {
+  display: flex; gap: 11px; align-items: flex-start;
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; cursor: pointer; background: var(--panel);
+}
+.pick:hover { border-color: var(--accent-2); }
+.pick input { margin-top: 3px; }
+.pick-name { font-weight: 600; }
+.pick-name small { color: var(--muted); font-weight: 500; font-size: 11px; }
+.pick-title { color: var(--text); font-size: 12.5px; }
+.pick-contact { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+
+/* ---------- Custom sheet (Excel-style table) ---------- */
+table.sheet { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+table.sheet th { text-align: left; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 10px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+table.sheet td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+table.sheet tr:last-child td { border-bottom: none; }
+table.sheet input, table.sheet select {
+  width: 100%; background: transparent; border: 1px solid transparent; color: var(--text);
+  border-radius: 7px; padding: 7px 8px; font: inherit; font-size: 13px;
+}
+table.sheet input:hover, table.sheet select:hover { border-color: var(--line); }
+table.sheet input:focus, table.sheet select:focus { outline: none; border-color: var(--accent-2); background: var(--bg-2); }
+table.sheet td:last-child { width: 44px; text-align: center; }
+
+
+/* ---------- Dashboard follow-ups + alerts + filters ---------- */
+.followups { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.fu { display: flex; align-items: center; gap: 10px; }
+.fu-name { flex: 1; cursor: pointer; }
+.fu-name:hover { color: var(--accent-2); text-decoration: underline; }
+.fu-days { color: var(--yellow); font-size: 12px; font-weight: 700; }
+.alert-chip { display: inline-block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; margin: 3px 4px 0 0; cursor: pointer; font-size: 12.5px; }
+.alert-chip:hover { border-color: var(--accent); }
+.filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.filters .search { min-width: 0; }
+
+/* ---------- Activity timeline ---------- */
+.timeline { border: 1px solid var(--line); border-radius: 9px; padding: 8px; max-height: 180px; overflow-y: auto; background: var(--bg-2); }
+.tl { font-size: 12.5px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+.tl-date { color: var(--muted); font-size: 11px; margin-right: 6px; }
+
+/* ---------- Margins + templates ---------- */
+.margins { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; max-height: 260px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: 9px; }
+.mg { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.mg span { flex: 1; }
+.mg input { width: 70px; background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 5px 7px; }
+.tpl-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.tpl { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+
+/* ---------- Offer table ---------- */
+table.offer tfoot td { border-top: 2px solid var(--line); }
+table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+
+/* build/version tag in the sidebar */
+.nav-version { margin-top: 14px; padding: 8px 10px; color: #5a6776; font-size: 10.5px; letter-spacing: .03em; border-top: 1px solid var(--line); }
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">M</div>
+        <div>
+          <h1>Metals CRM</h1>
+          <small>EU non-ferrous sales desk</small>
+        </div>
+      </div>
+      <nav id="nav"></nav>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <div id="pricebar" class="pricebar"></div>
+      <div id="content" class="content"></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <!-- Scripts (classic, load order matters — no build, no dependencies).
+       The ?v= query busts browser/CDN cache on each release — bump on changes. -->
+  <script>
+/* ============================================================
+   data.js  —  Static reference data (no dependencies)
+   Attaches everything to the global window.App namespace.
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  // Bump on each release; shown in the sidebar so you can confirm the live build.
+  App.VERSION = "build 6 · metalflow";
+
+  /* ---- Metal groups: drive colour coding + LME price linkage ---- */
+  // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
+  App.METALS = {
+    copper:    { label: "Copper",          color: "#c2703d", lmeKey: "copper" },
+    aluminium: { label: "Aluminium",       color: "#7f93a8", lmeKey: "aluminium" },
+    zinc:      { label: "Zinc",            color: "#5b8a9a", lmeKey: "zinc" },
+    lead:      { label: "Lead",            color: "#5d6470", lmeKey: "lead" },
+    brass:     { label: "Brass / Alloy",   color: "#b89630", lmeKey: null },     // derived from Cu + Zn
+    stainless: { label: "Stainless / Ni",  color: "#8a8f98", lmeKey: "nickel" },
+    iron:      { label: "Iron / Steel",    color: "#6b7280", lmeKey: null },
+    gold:      { label: "Gold",            color: "#d4af37", lmeKey: "gold" }
+  };
+
+  /* ---- The 25 products you sell ---- */
+  // type: primary | scrap | compound | product
+  App.PRODUCTS = [
+    { id: "copper-ingots-97",   name: "Copper ingots 97%",                 metal: "copper",    type: "primary",  unit: "MT" },
+    { id: "copper-cathode",     name: "Copper cathode 99.99%",             metal: "copper",    type: "primary",  unit: "MT" },
+    { id: "aluminium-ingots",   name: "Aluminium ingots 95%",              metal: "aluminium", type: "primary",  unit: "MT" },
+    { id: "copper-rod",         name: "Copper rod 8mm–16mm",               metal: "copper",    type: "product",  unit: "MT" },
+    { id: "copper-billet",      name: "Copper billet",                     metal: "copper",    type: "product",  unit: "MT" },
+    { id: "zinc-ingot-hg",      name: "High grade zinc ingot",             metal: "zinc",      type: "primary",  unit: "MT" },
+    { id: "lead-remelted",      name: "Remelted lead ingots",              metal: "lead",      type: "primary",  unit: "MT" },
+    { id: "lead-refined",       name: "Refined lead ingots",               metal: "lead",      type: "primary",  unit: "MT" },
+    { id: "lead-antimony",      name: "Antimony lead ingots",              metal: "lead",      type: "primary",  unit: "MT" },
+    { id: "al-scrap-ubc",       name: "Aluminium scrap UBC (extrusion/Talk)", metal: "aluminium", type: "scrap", unit: "MT" },
+    { id: "brass-scrap-honey",  name: "Brass scrap (honey / ocean radiator)", metal: "brass", type: "scrap",    unit: "MT" },
+    { id: "lead-oxide",         name: "Lead oxide",                        metal: "lead",      type: "compound", unit: "MT" },
+    { id: "cu-scrap-berry",     name: "Copper scrap (berry)",              metal: "copper",    type: "scrap",    unit: "MT" },
+    { id: "cu-scrap-birch",     name: "Copper scrap (birch/cliff)",        metal: "copper",    type: "scrap",    unit: "MT" },
+    { id: "cu-scrap-millberry", name: "Copper scrap (millberry)",          metal: "copper",    type: "scrap",    unit: "MT" },
+    { id: "zinc-oxide",         name: "Zinc oxide",                        metal: "zinc",      type: "compound", unit: "MT" },
+    { id: "cast-iron",          name: "Cast iron",                         metal: "iron",      type: "primary",  unit: "MT" },
+    { id: "brass-alloy-ingots", name: "Brass alloy ingots",                metal: "brass",     type: "primary",  unit: "MT" },
+    { id: "brass-billet",       name: "Brass billet",                      metal: "brass",     type: "product",  unit: "MT" },
+    { id: "copper-busbar",      name: "Copper busbar",                     metal: "copper",    type: "product",  unit: "MT" },
+    { id: "al-sows",            name: "Aluminium sows A7–A5",              metal: "aluminium", type: "primary",  unit: "MT" },
+    { id: "copper-pipe",        name: "Copper pipe",                       metal: "copper",    type: "product",  unit: "MT" },
+    { id: "ss-304",             name: "Stainless steel 304",               metal: "stainless", type: "product",  unit: "MT" },
+    { id: "al-talon",           name: "Aluminium Talon",                   metal: "aluminium", type: "scrap",    unit: "MT" },
+    { id: "al-wheels",          name: "Aluminium wheels",                  metal: "aluminium", type: "scrap",    unit: "MT" }
+  ];
+
+  App.productById = function (id) {
+    return App.PRODUCTS.find(function (p) { return p.id === id; });
+  };
+
+  /* ---- The 27 EU member states ---- */
+  App.COUNTRIES = [
+    { code: "AT", name: "Austria",        flag: "🇦🇹" },
+    { code: "BE", name: "Belgium",        flag: "🇧🇪" },
+    { code: "BG", name: "Bulgaria",       flag: "🇧🇬" },
+    { code: "HR", name: "Croatia",        flag: "🇭🇷" },
+    { code: "CY", name: "Cyprus",         flag: "🇨🇾" },
+    { code: "CZ", name: "Czechia",        flag: "🇨🇿" },
+    { code: "DK", name: "Denmark",        flag: "🇩🇰" },
+    { code: "EE", name: "Estonia",        flag: "🇪🇪" },
+    { code: "FI", name: "Finland",        flag: "🇫🇮" },
+    { code: "FR", name: "France",         flag: "🇫🇷" },
+    { code: "DE", name: "Germany",        flag: "🇩🇪" },
+    { code: "GR", name: "Greece",         flag: "🇬🇷" },
+    { code: "HU", name: "Hungary",        flag: "🇭🇺" },
+    { code: "IE", name: "Ireland",        flag: "🇮🇪" },
+    { code: "IT", name: "Italy",          flag: "🇮🇹" },
+    { code: "LV", name: "Latvia",         flag: "🇱🇻" },
+    { code: "LT", name: "Lithuania",      flag: "🇱🇹" },
+    { code: "LU", name: "Luxembourg",     flag: "🇱🇺" },
+    { code: "MT", name: "Malta",          flag: "🇲🇹" },
+    { code: "NL", name: "Netherlands",    flag: "🇳🇱" },
+    { code: "PL", name: "Poland",         flag: "🇵🇱" },
+    { code: "PT", name: "Portugal",       flag: "🇵🇹" },
+    { code: "RO", name: "Romania",        flag: "🇷🇴" },
+    { code: "SK", name: "Slovakia",       flag: "🇸🇰" },
+    { code: "SI", name: "Slovenia",       flag: "🇸🇮" },
+    { code: "ES", name: "Spain",          flag: "🇪🇸" },
+    { code: "SE", name: "Sweden",         flag: "🇸🇪" }
+  ];
+
+  App.countryByCode = function (code) {
+    var c = App.COUNTRIES.find(function (x) { return x.code === code; });
+    if (c) return c;
+    if (App.Store && App.Store.customCountries) {
+      return App.Store.customCountries().find(function (x) { return x.code === code; });
+    }
+    return undefined;
+  };
+
+  // All selectable countries = the 27 EU members + any custom ones the user added.
+  App.allCountries = function () {
+    var custom = (App.Store && App.Store.customCountries) ? App.Store.customCountries() : [];
+    return App.COUNTRIES.concat(custom);
+  };
+
+  /* ---- LME price rows shown in the manual editor ---- */
+  App.PRICE_ROWS = [
+    { key: "copper",    label: "Copper (Grade A)",  metal: "copper",    hasPremium: true, premiumLabel: "Cu eq premium CIF-EU" },
+    { key: "aluminium", label: "Aluminium (P1020)", metal: "aluminium", hasPremium: true, premiumLabel: "Al premium duty-paid EU" },
+    { key: "zinc",      label: "Zinc (SHG)",        metal: "zinc" },
+    { key: "lead",      label: "Lead",              metal: "lead" },
+    { key: "nickel",    label: "Nickel",            metal: "stainless" },
+    { key: "gold",      label: "Gold spot",         metal: "gold", unit: "/oz" }
+  ];
+
+  /* ---- The top ticker strip (mirrors a trading-desk board) ---- */
+  // kind: metal (LME/spot price) | premium (regional premium)
+  App.TICKER = [
+    { key: "copper",    label: "LME COPPER (3M)",      metal: "copper",    unit: "/MT", kind: "metal" },
+    { key: "aluminium", label: "LME ALUMINIUM (3M)",   metal: "aluminium", unit: "/MT", kind: "metal" },
+    { key: "zinc",      label: "LME ZINC (3M)",        metal: "zinc",      unit: "/MT", kind: "metal" },
+    { key: "lead",      label: "LME LEAD (3M)",        metal: "lead",      unit: "/MT", kind: "metal" },
+    { key: "nickel",    label: "LME NICKEL (3M)",      metal: "stainless", unit: "/MT", kind: "metal" },
+    { key: "gold",      label: "GOLD SPOT",            metal: "gold",      unit: "/oz", kind: "metal" },
+    { key: "aluminium", label: "AL PREMIUM DP-EU",     metal: "aluminium", unit: "/MT spot · Fastmarkets MB", kind: "premium" },
+    { key: "copper",    label: "CU EQ PREMIUM CIF-EU", metal: "copper",    unit: "/MT · Fastmarkets MB", kind: "premium" }
+  ];
+
+  /* Reference link for the EU aluminium premium the user mentioned. */
+  App.PREMIUM_SOURCE_URL =
+    "https://www.lme.com/metals/non-ferrous/lme-aluminium-premiums/lme-aluminium-premium-duty-paid-european-fastmarkets-mb";
+
+  /* Job titles that flag someone responsible for BUYING metals.
+     Sent to the Apollo proxy as person_titles (partial matching). */
+  App.BUYER_TITLES = [
+    "procurement", "purchasing", "buyer", "sourcing", "supply chain",
+    "trader", "trading", "commodity", "raw materials", "category manager",
+    "commercial", "head of metals"
+  ];
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   seed-eu.js  —  EU non-ferrous starter buyer list (research leads)
+   ------------------------------------------------------------
+   Real, publicly-known non-ferrous producers, smelters, refiners,
+   fabricators and recyclers across the EU, with their public website
+   domains. These are STARTING RESEARCH LEADS, not verified buyers:
+     • Contact emails/phones are intentionally LEFT BLANK — use the
+       Apollo "Find buyers" / "Find buyers (all)" button to pull
+       VERIFIED procurement contacts (emails) for each domain. We do
+       not hand-type emails, to avoid fabricated/incorrect addresses.
+     • The "materials" tags are INDICATIVE; verify before pitching.
+     • Domains are best-effort — Apollo matches by domain, so a wrong
+       one simply returns no results (low risk). Verify as you go.
+   Coverage note: big industrial countries have many entries; small
+   member states have few or none with a real non-ferrous presence,
+   so they're lighter on purpose (no invented companies).
+   Load from the app: Import → "Load EU starter list".
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var N = "Research lead — verify domain & contact; pull verified emails via Apollo.";
+  function C(name, country, city, website, materials, email) {
+    return { name: name, country: country, city: city, website: website, materials: materials, email: email || "", notes: N };
+  }
+
+  App.EU_SEED = [
+    /* ---------------- Germany ---------------- */
+    C("Aurubis AG", "DE", "Hamburg", "aurubis.com", ["copper-cathode", "cu-scrap-millberry", "copper-billet"], "info@aurubis.com"),
+    C("Wieland-Werke AG", "DE", "Ulm", "wieland.com", ["brass-alloy-ingots", "brass-billet", "copper-busbar"], "info@wieland.com"),
+    C("KME Germany GmbH", "DE", "Osnabrück", "kme.com", ["copper-busbar", "copper-pipe", "brass-billet"]),
+    C("TRIMET Aluminium SE", "DE", "Essen", "trimet.eu", ["aluminium-ingots", "al-sows", "al-scrap-ubc"], "sales@trimet.de"),
+    C("Speira GmbH", "DE", "Grevenbroich", "speira.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("MKM Mansfelder Kupfer und Messing", "DE", "Hettstedt", "mkm.eu", ["copper-busbar", "copper-rod", "brass-billet"]),
+    C("Diehl Metall", "DE", "Röthenbach", "diehl.com", ["brass-alloy-ingots", "brass-billet"]),
+    C("Otto Fuchs KG", "DE", "Meinerzhagen", "otto-fuchs.com", ["aluminium-ingots", "brass-alloy-ingots"]),
+    C("ELG Haniel", "DE", "Duisburg", "elg.de", ["ss-304"]),
+    C("Oryx Stainless", "DE", "Mülheim", "oryx.de", ["ss-304"]),
+    C("TSR Recycling", "DE", "Lünen", "tsr.eu", ["cu-scrap-berry", "al-scrap-ubc", "ss-304"]),
+    C("Scholz Recycling", "DE", "Essingen", "scholz-recycling.de", ["cu-scrap-berry", "al-scrap-ubc"]),
+    C("Novelis Deutschland", "DE", "Göttingen", "novelis.com", ["al-scrap-ubc", "aluminium-ingots"]),
+    C("HME Brass Germany", "DE", "Berlin", "hmemetal.com", ["brass-alloy-ingots", "brass-billet"]),
+
+    /* ---------------- Italy ---------------- */
+    C("KME Italy S.p.A.", "IT", "Florence", "kme.com", ["copper-busbar", "copper-pipe"]),
+    C("Raffmetal S.p.A.", "IT", "Casto (Brescia)", "raffmetal.it", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Eural Gnutti S.p.A.", "IT", "Rovato (Brescia)", "eural.com", ["brass-billet", "brass-alloy-ingots"]),
+    C("Eredi Gnutti Metalli", "IT", "Brescia", "egm.it", ["brass-billet", "copper-busbar"]),
+    C("Profilglass S.p.A.", "IT", "Fano", "profilglass.it", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Laminazione Sottile", "IT", "San Marco Evangelista", "laminazionesottile.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Metra S.p.A.", "IT", "Rodengo Saiano", "metra.it", ["aluminium-ingots"]),
+    C("Service Metal Company", "IT", "Brescia", "servicemetalco.com", ["brass-billet", "brass-alloy-ingots"]),
+
+    /* ---------------- France ---------------- */
+    C("Nexans", "FR", "Paris", "nexans.com", ["copper-rod", "copper-busbar"]),
+    C("Constellium SE", "FR", "Paris", "constellium.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Recylex SA", "FR", "Suresnes", "recylex.eu", ["lead-refined", "lead-oxide", "zinc-oxide"]),
+    C("Aluminium Dunkerque", "FR", "Dunkerque", "aluminiumdunkerque.com", ["aluminium-ingots", "al-sows"]),
+    C("Derichebourg Environnement", "FR", "Paris", "derichebourg.com", ["cu-scrap-berry", "al-scrap-ubc", "ss-304"]),
+    C("Paprec Group", "FR", "La Courneuve", "paprec.com", ["cu-scrap-berry", "al-scrap-ubc"]),
+    C("Eramet", "FR", "Paris", "eramet.com", ["ss-304"]),
+
+    /* ---------------- Spain ---------------- */
+    C("Atlantic Copper S.L.U.", "ES", "Huelva", "atlanticcopper.es", ["copper-cathode", "copper-billet"]),
+    C("Cunext Group", "ES", "Córdoba", "cunext.com", ["copper-rod", "copper-cathode"]),
+    C("La Farga", "ES", "Les Masies de Voltregà", "lafarga.com", ["copper-rod", "copper-busbar", "cu-scrap-millberry"]),
+    C("Aludium", "ES", "Madrid", "aludium.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Alcoa San Ciprián", "ES", "Lugo", "alcoa.com", ["aluminium-ingots", "al-sows"]),
+    C("Befesa S.A.", "ES", "Bilbao", "befesa.com", ["zinc-oxide", "al-scrap-ubc"]),
+
+    /* ---------------- Poland ---------------- */
+    C("KGHM Polska Miedź S.A.", "PL", "Lubin", "kghm.com", ["copper-cathode", "copper-rod", "copper-billet"]),
+    C("Grupa Kęty S.A.", "PL", "Kęty", "grupakety.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Boryszew S.A. (Hutmen)", "PL", "Warsaw", "boryszew.com", ["brass-billet", "copper-busbar"]),
+    C("Impexmetal S.A.", "PL", "Warsaw", "impexmetal.com", ["brass-alloy-ingots", "copper-busbar"]),
+    C("Huta Cynku Miasteczko Śląskie", "PL", "Miasteczko Śląskie", "hcm.com.pl", ["zinc-ingot-hg", "zinc-oxide"]),
+
+    /* ---------------- Belgium ---------------- */
+    C("Umicore", "BE", "Brussels", "umicore.com", ["lead-oxide", "zinc-oxide", "copper-cathode"]),
+    C("Aurubis Beerse", "BE", "Beerse", "aurubis.com", ["copper-cathode", "cu-scrap-millberry"]),
+    C("Campine NV", "BE", "Beerse", "campine.com", ["lead-oxide", "lead-antimony"]),
+
+    /* ---------------- Netherlands ---------------- */
+    C("Nyrstar Budel", "NL", "Budel", "nyrstar.com", ["zinc-ingot-hg", "zinc-oxide"]),
+    C("Nedzink B.V.", "NL", "Budel", "nedzink.com", ["zinc-ingot-hg", "zinc-oxide"]),
+    C("Aldel (Aluminium Delfzijl)", "NL", "Delfzijl", "aldel.nl", ["aluminium-ingots", "al-sows"]),
+    C("Oryx Stainless (NL)", "NL", "Roermond", "oryx.de", ["ss-304"]),
+
+    /* ---------------- Sweden ---------------- */
+    C("Boliden AB", "SE", "Stockholm", "boliden.com", ["copper-cathode", "zinc-ingot-hg", "lead-refined"]),
+    C("Gränges AB", "SE", "Stockholm", "granges.com", ["aluminium-ingots", "al-scrap-ubc"]),
+    C("Stena Metall AB", "SE", "Gothenburg", "stenametall.com", ["cu-scrap-berry", "al-scrap-ubc", "ss-304"]),
+
+    /* ---------------- Finland ---------------- */
+    C("Kuusakoski Oy", "FI", "Espoo", "kuusakoski.com", ["cu-scrap-millberry", "al-scrap-ubc", "ss-304"]),
+    C("Boliden Harjavalta Oy", "FI", "Harjavalta", "boliden.com", ["copper-cathode"]),
+
+    /* ---------------- Austria ---------------- */
+    C("AMAG Austria Metall AG", "AT", "Ranshofen", "amag.at", ["aluminium-ingots", "al-scrap-ubc", "al-sows"], "md-amag@amag.at"),
+    C("Montanwerke Brixlegg AG", "AT", "Brixlegg", "montanwerke-brixlegg.com", ["copper-cathode", "cu-scrap-millberry"]),
+
+    /* ---------------- Greece ---------------- */
+    C("ElvalHalcor S.A.", "GR", "Athens", "elvalhalcor.com", ["copper-busbar", "aluminium-ingots", "copper-pipe"]),
+    C("Metlen (Aluminium of Greece)", "GR", "Athens", "metlen.com", ["aluminium-ingots", "al-sows"]),
+    C("Viohalco", "GR", "Athens", "viohalco.com", ["copper-busbar", "aluminium-ingots"]),
+
+    /* ---------------- Bulgaria ---------------- */
+    C("Aurubis Bulgaria AD", "BG", "Pirdop", "aurubis.com", ["copper-cathode"]),
+    C("KCM AD", "BG", "Plovdiv", "kcm.bg", ["lead-refined", "zinc-ingot-hg", "zinc-oxide"]),
+    C("Alcomet AD", "BG", "Shumen", "alcomet.eu", ["aluminium-ingots", "al-scrap-ubc"]),
+
+    /* ---------------- Slovenia ---------------- */
+    C("Talum d.d.", "SI", "Kidričevo", "talum.si", ["aluminium-ingots", "al-sows"]),
+    C("Impol Group", "SI", "Slovenska Bistrica", "impol.si", ["aluminium-ingots", "al-scrap-ubc"]),
+
+    /* ---------------- Slovakia ---------------- */
+    C("Slovalco a.s.", "SK", "Žiar nad Hronom", "slovalco.sk", ["aluminium-ingots", "al-sows"]),
+    C("Kovohuty a.s.", "SK", "Krompachy", "kovohuty.sk", ["copper-cathode", "cu-scrap-millberry"]),
+
+    /* ---------------- Czechia ---------------- */
+    C("Kovohutě Příbram", "CZ", "Příbram", "kovohute.cz", ["lead-refined", "lead-oxide"]),
+    C("AL INVEST Břidličná, a.s.", "CZ", "Břidličná", "alinvest.cz", ["aluminium-ingots", "al-scrap-ubc"]),
+
+    /* ---------------- Romania ---------------- */
+    C("Alro S.A.", "RO", "Slatina", "alro.ro", ["aluminium-ingots", "al-sows", "al-scrap-ubc"]),
+
+    /* ---------------- Hungary ---------------- */
+    C("Hydro Extrusion Hungary", "HU", "Székesfehérvár", "hydro.com", ["aluminium-ingots", "al-scrap-ubc"]),
+
+    /* ---------------- Denmark ---------------- */
+    C("H.J. Hansen Recycling", "DK", "Odense", "hjhansen.dk", ["cu-scrap-berry", "al-scrap-ubc", "ss-304"]),
+    C("Stena Recycling Denmark", "DK", "Roskilde", "stenarecycling.dk", ["cu-scrap-berry", "al-scrap-ubc"]),
+
+    /* ---------------- Croatia ---------------- */
+    C("TLM d.d. Šibenik", "HR", "Šibenik", "tlm.hr", ["aluminium-ingots", "al-scrap-ubc"]),
+
+    /* ---------------- Luxembourg ---------------- */
+    C("Befesa (HQ)", "LU", "Luxembourg", "befesa.com", ["zinc-oxide"]),
+
+    /* ---------------- Portugal ---------------- */
+    C("Cabelte", "PT", "Porto", "cabelte.pt", ["copper-rod", "copper-busbar"]),
+
+    /* ---------------- Ireland ---------------- */
+    C("Hammond Lane Metal Company", "IE", "Dublin", "hammondlane.ie", ["cu-scrap-berry", "al-scrap-ubc", "ss-304"]),
+
+    /* ---------------- Lithuania ---------------- */
+    C("EMP Recycling", "LT", "Vilnius", "emp.lt", ["cu-scrap-berry", "al-scrap-ubc"]),
+
+    /* ---------------- Estonia ---------------- */
+    C("Kuusakoski AS (Estonia)", "EE", "Tallinn", "kuusakoski.com", ["cu-scrap-millberry", "al-scrap-ubc"])
+  ];
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   store.js  —  localStorage-backed state + import/export
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var KEY = "metals-crm-state-v1";
+
+  var DEFAULT_SETTINGS = {
+    senderName: "Your Name",
+    senderTitle: "Sales / Trading",
+    companyName: "Your Company Ltd.",
+    senderEmail: "",            // your Gmail work address (used to build thread links)
+    phone: "",
+    website: "",
+    signature: "",              // optional extra signature lines
+    apolloProxyUrl: "http://localhost:8787",  // address of your local Apollo proxy
+    revealContacts: false,      // if true, proxy spends Apollo credits to unlock emails
+    revealPhone: false,         // if true, also request phone numbers (async; needs public proxy)
+    autoScanPrices: true,       // auto-fetch live prices daily on app load (needs a price provider)
+    priceSource: "free",        // free | metalsapi | custom | proxy | manual
+    priceApiKey: "",            // Metals-API key (only if you choose the metalsapi source)
+    priceCustomUrl: "",         // any CORS JSON endpoint returning normalized prices
+    priceInvert: true,          // Metals-API returns base/symbol -> use 1/rate
+    priceUnit: "tonne",         // tonne | lb | oz (converted to per-tonne)
+    priceMult: 1,               // final calibration multiplier
+    priceLiveSeconds: 60,       // auto-refresh interval for the live ticker (0 = off)
+    teamSync: false,            // share data with teammates via the proxy /api/data
+    syncServerUrl: "",          // defaults to the Apollo proxy URL when blank
+    syncToken: "",              // optional shared secret (matches proxy DATA_AUTH_TOKEN)
+    displayCurrency: "USD",     // USD | EUR (ticker display toggle; prices stored in USD)
+    margins: {},                // productId -> margin % applied over the metal price for offers
+    templates: [],              // [{ id, name, subject, body }] email templates
+    defaultTemplateId: "",      // template used by default when composing
+    followUpDays: 4,            // a buyer stuck on 'awaiting reply' longer than this needs follow-up
+    alertPct: 2                 // flag a metal on the dashboard when it moves more than this %
+  };
+
+  // LME prices are entered manually (or via the optional live adapter).
+  // Values in USD per metric tonne. Aluminium premium in USD/MT (EU duty paid).
+  var DEFAULT_PRICES = {
+    currency: "USD",
+    unit: "per MT",
+    updatedAt: null,
+    source: "Manual entry",
+    delayed: false,
+    premiums: {},
+    fx: null,                   // EUR/USD rate (USD per 1 EUR) for the currency toggle
+    rows: {
+      copper:    { value: null, prev: null, premium: null },
+      aluminium: { value: null, prev: null, premium: null },
+      zinc:      { value: null, prev: null },
+      lead:      { value: null, prev: null },
+      nickel:    { value: null, prev: null },
+      gold:      { value: null, prev: null }
+    }
+  };
+
+  function uid() {
+    return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  App.uid = uid;
+
+  /* ---- Clearly-labelled SAMPLE rows. Replace with real Apollo/CSV data. ---- */
+  function sampleCompanies() {
+    return [
+      {
+        id: uid(), name: "[SAMPLE] Rheinmetall Recycling GmbH", country: "DE",
+        city: "Düsseldorf", website: "example.com",
+        contactName: "Procurement Desk", email: "buyer@example.com", phone: "+49 000 000",
+        materials: ["copper-cathode", "cu-scrap-millberry", "aluminium-ingots"],
+        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null,
+        notes: "Sample row — replace with real verified contact."
+      },
+      {
+        id: uid(), name: "[SAMPLE] Lombardia Metalli S.p.A.", country: "IT",
+        city: "Milan", website: "example.com",
+        contactName: "Purchasing", email: "acquisti@example.com", phone: "+39 000 000",
+        materials: ["brass-scrap-honey", "zinc-ingot-hg", "lead-refined"],
+        status: "yellow", lastEmailSubject: "Q3 supply — copper & brass", lastEmailAt: Date.now() - 86400000, lastReplyAt: null,
+        notes: "Sample row — replace with real verified contact."
+      },
+      {
+        id: uid(), name: "[SAMPLE] Iberia Nonferrous SL", country: "ES",
+        city: "Bilbao", website: "example.com",
+        contactName: "Trading", email: "trading@example.com", phone: "+34 000 000",
+        materials: ["al-scrap-ubc", "al-sows", "ss-304"],
+        status: "green", lastEmailSubject: "Aluminium sows availability", lastEmailAt: Date.now() - 172800000, lastReplyAt: Date.now() - 3600000,
+        notes: "Sample row — replied, follow up."
+      }
+    ];
+  }
+
+  function freshState() {
+    var companies = sampleCompanies();
+    companies.forEach(function (c) { if (!Array.isArray(c.people)) c.people = []; });
+    return {
+      version: 1,
+      settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+      prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)),
+      companies: companies,
+      customCountries: [],
+      sheet: []
+    };
+  }
+
+  var state = null;
+
+  // Backfill/repair a state object (after upgrades or a remote pull).
+  function normalize(s) {
+    s.settings = Object.assign({}, DEFAULT_SETTINGS, s.settings || {});
+    s.prices = Object.assign({}, DEFAULT_PRICES, s.prices || {});
+    s.prices.rows = Object.assign({}, DEFAULT_PRICES.rows, s.prices.rows || {});
+    if (!Array.isArray(s.companies)) s.companies = [];
+    s.companies.forEach(function (c) {
+      if (!Array.isArray(c.people)) c.people = [];
+      c.people.forEach(function (p) { if (!p.status) p.status = "red"; });
+      if (!Array.isArray(c.activity)) c.activity = [];
+    });
+    if (!Array.isArray(s.settings.templates)) s.settings.templates = [];
+    if (!s.settings.margins || typeof s.settings.margins !== "object") s.settings.margins = {};
+    if (!Array.isArray(s.customCountries)) s.customCountries = [];
+    if (!Array.isArray(s.sheet)) s.sheet = [];
+    if (typeof s.rev !== "number") s.rev = 0;
+    return s;
+  }
+
+  // Optional change hook (used by team sync to push after local edits).
+  var changeHook = null, suppressHook = false;
+
+  function load() {
+    if (state) return state;
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        state = normalize(JSON.parse(raw));
+        return state;
+      }
+    } catch (e) {
+      console.warn("Could not read saved state, starting fresh.", e);
+    }
+    state = freshState();
+    save();
+    return state;
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error("Save failed (storage full or blocked).", e);
+    }
+    if (changeHook && !suppressHook) { try { changeHook(); } catch (e) {} }
+  }
+
+  var Store = {
+    get: function () { return load(); },
+    save: save,
+
+    /* ---------- Companies ---------- */
+    companies: function () { return load().companies; },
+    companiesByCountry: function (code) {
+      return load().companies.filter(function (c) { return c.country === code; });
+    },
+    companyById: function (id) {
+      return load().companies.find(function (c) { return c.id === id; });
+    },
+    addCompany: function (data) {
+      var c = Object.assign({
+        id: uid(), name: "", country: "DE", city: "", website: "",
+        contactName: "", email: "", phone: "", materials: [], people: [],
+        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null, notes: "", activity: []
+      }, data || {});
+      load().companies.push(c);
+      save();
+      return c;
+    },
+    updateCompany: function (id, patch) {
+      var c = this.companyById(id);
+      if (c) { Object.assign(c, patch); save(); }
+      return c;
+    },
+    deleteCompany: function (id) {
+      var s = load();
+      s.companies = s.companies.filter(function (c) { return c.id !== id; });
+      save();
+    },
+    setStatus: function (id, status, extra) {
+      this.updateCompany(id, Object.assign({ status: status }, extra || {}));
+    },
+
+    // Append a dated entry to a buyer's activity timeline.
+    logActivity: function (id, type, text) {
+      var c = this.companyById(id);
+      if (!c) return;
+      if (!Array.isArray(c.activity)) c.activity = [];
+      c.activity.unshift({ ts: Date.now(), type: type, text: text });
+      c.activity = c.activity.slice(0, 50);
+      save();
+    },
+
+    // Merge Apollo-discovered people into a company (dedupe by name/email).
+    // If the company has no primary email yet, promote the first emailed person.
+    addPeople: function (id, people) {
+      var c = this.companyById(id);
+      if (!c) return 0;
+      if (!Array.isArray(c.people)) c.people = [];
+      var added = 0;
+      (people || []).forEach(function (p) {
+        if (!p || (!p.name && !p.email)) return;
+        var dup = c.people.some(function (x) {
+          return (p.email && x.email && x.email.toLowerCase() === p.email.toLowerCase()) ||
+                 (!p.email && x.name && p.name && x.name.toLowerCase() === p.name.toLowerCase());
+        });
+        if (dup) return;
+        c.people.push({
+          name: p.name || "", title: p.title || "", seniority: p.seniority || "",
+          email: p.email || "", phone: p.phone || "", linkedin: p.linkedin || "",
+          locked: !!p.locked,
+          status: "red", lastEmailAt: null, lastReplyAt: null
+        });
+        added++;
+      });
+      if (!c.contactName && c.people.length) {
+        var primary = c.people.find(function (x) { return x.email; }) || c.people[0];
+        c.contactName = primary.name;
+        if (!c.email && primary.email) c.email = primary.email;
+        if (!c.phone && primary.phone) c.phone = primary.phone;
+      }
+      save();
+      return added;
+    },
+    removePerson: function (id, index) {
+      var c = this.companyById(id);
+      if (c && c.people) { c.people.splice(index, 1); rollupCompany(c); save(); }
+    },
+
+    // Set a single contact's traffic-light status, then roll the company up.
+    setPersonStatus: function (id, index, status, extra) {
+      var c = this.companyById(id);
+      if (!c || !c.people || !c.people[index]) return;
+      Object.assign(c.people[index], { status: status }, extra || {});
+      rollupCompany(c);
+      save();
+    },
+
+    // Merge a {nameLower: phone} map (from the async webhook) into a company's people.
+    mergePhones: function (id, phoneMap) {
+      var c = this.companyById(id);
+      if (!c || !c.people || !phoneMap) return 0;
+      var n = 0;
+      c.people.forEach(function (p) {
+        var key = (p.name || "").toLowerCase();
+        if (!p.phone && phoneMap[key]) { p.phone = phoneMap[key]; n++; }
+      });
+      if (n) {
+        if (!c.phone && c.people[0] && c.people[0].phone) c.phone = c.people[0].phone;
+        save();
+      }
+      return n;
+    },
+
+    /* ---------- Settings ---------- */
+    settings: function () { return load().settings; },
+    updateSettings: function (patch) {
+      Object.assign(load().settings, patch); save();
+    },
+
+    /* ---------- Prices ---------- */
+    prices: function () { return load().prices; },
+    updatePrices: function (patch) {
+      Object.assign(load().prices, patch);
+      load().prices.updatedAt = Date.now();
+      save();
+    },
+    setPriceRow: function (key, partial) {
+      var p = load().prices;
+      var cur = p.rows[key] || {};
+      if (partial && partial.value != null && cur.value != null && Number(partial.value) !== Number(cur.value)) {
+        partial = Object.assign({ prev: cur.value }, partial);
+      }
+      p.rows[key] = Object.assign({}, cur, partial);
+      p.updatedAt = Date.now();
+      save();
+    },
+
+    // Apply a normalized feed result from the proxy /api/prices endpoint.
+    applyPriceFeed: function (d) {
+      if (!d) return;
+      var p = load().prices;
+      ["copper", "aluminium", "zinc", "lead", "nickel", "gold"].forEach(function (k) {
+        if (d[k] != null && !isNaN(d[k])) {
+          var old = p.rows[k] && p.rows[k].value;
+          var prev = (d.prevs && d.prevs[k] != null && !isNaN(d.prevs[k]))
+            ? Number(d.prevs[k])                                   // daily close from the feed
+            : (old != null ? old : (p.rows[k] && p.rows[k].prev)); // else roll the last value
+          // sparkline series: prefer the feed's history, else append to a rolling buffer
+          var series;
+          if (d.series && Array.isArray(d.series[k]) && d.series[k].length) {
+            series = d.series[k].slice(-40);
+          } else {
+            series = ((p.rows[k] && p.rows[k].series) || []).slice();
+            series.push(Number(d[k]));
+            series = series.slice(-40);
+          }
+          p.rows[k] = Object.assign({}, p.rows[k], { prev: prev, value: Number(d[k]), series: series });
+        }
+      });
+      // premiums: aluminium (duty-paid EU) and copper (CIF-EU equivalent)
+      if (d.premium != null && !isNaN(d.premium)) p.rows.aluminium = Object.assign({}, p.rows.aluminium, { premium: Number(d.premium) });
+      var prem = d.premiums || {};
+      if (prem.aluminium != null) p.rows.aluminium = Object.assign({}, p.rows.aluminium, { premium: Number(prem.aluminium) });
+      if (prem.copper != null) p.rows.copper = Object.assign({}, p.rows.copper, { premium: Number(prem.copper) });
+      p.premiums = prem;
+      if (d.fx != null && !isNaN(d.fx)) p.fx = Number(d.fx);
+      if (d.currency) p.currency = d.currency;
+      p.delayed = !!d.delayed;
+      p.source = d.source || "Live feed";
+      p.updatedAt = Date.now();
+      save();
+    },
+
+    /* ---------- Import / Export ---------- */
+    exportJSON: function () {
+      return JSON.stringify(load(), null, 2);
+    },
+    importJSON: function (text) {
+      var obj = JSON.parse(text);
+      if (!obj || !Array.isArray(obj.companies)) throw new Error("Invalid backup file.");
+      state = Object.assign(freshState(), obj);
+      save();
+    },
+    // Load the bundled EU starter list (research leads), skipping any
+    // company that already exists (matched by name + country).
+    importSeed: function (seed) {
+      var existing = load().companies;
+      var added = 0;
+      (seed || []).forEach(function (s) {
+        var dup = existing.some(function (c) {
+          return (c.name || "").toLowerCase() === (s.name || "").toLowerCase() && c.country === s.country;
+        });
+        if (dup) return;
+        Store.addCompany({
+          name: s.name, country: s.country, city: s.city || "", website: s.website || "",
+          email: s.email || "", materials: (s.materials || []).slice(), notes: s.notes || ""
+        });
+        added++;
+      });
+      return added;
+    },
+
+    // Bulk add companies from parsed CSV rows (objects keyed by header).
+    importCompanyRows: function (rows) {
+      var added = 0;
+      rows.forEach(function (r) {
+        if (!r.name && !r.email) return;
+        Store.addCompany({
+          name: r.name || "",
+          country: (r.country || "").toUpperCase().slice(0, 2) || "DE",
+          city: r.city || "",
+          website: r.website || "",
+          contactName: r.contact || r.contactname || r.contact_name || "",
+          email: r.email || "",
+          phone: r.phone || "",
+          materials: parseMaterials(r.materials),
+          notes: r.notes || ""
+        });
+        added++;
+      });
+      return added;
+    },
+    resetAll: function () {
+      state = freshState();
+      save();
+    },
+
+    /* ---------- Custom countries ---------- */
+    customCountries: function () { var s = load(); if (!s.customCountries) s.customCountries = []; return s.customCountries; },
+    addCustomCountry: function (name, flag) {
+      var s = load(); if (!s.customCountries) s.customCountries = [];
+      var code = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
+      var c = { code: code, name: (name || "New country").trim(), flag: (flag || "🌍").trim() || "🌍", custom: true };
+      s.customCountries.push(c); save(); return c;
+    },
+    removeCustomCountry: function (code) {
+      var s = load();
+      s.customCountries = (s.customCountries || []).filter(function (c) { return c.code !== code; });
+      s.companies = s.companies.filter(function (c) { return c.country !== code; });
+      save();
+    },
+
+    /* ---------- Custom sheet ---------- */
+    sheetRows: function () { var s = load(); if (!s.sheet) s.sheet = []; return s.sheet; },
+    addSheetRow: function (data) {
+      var s = load(); if (!s.sheet) s.sheet = [];
+      var r = Object.assign({ id: uid(), product: "", country: "", material: "", qty: "", notes: "" }, data || {});
+      s.sheet.push(r); save(); return r;
+    },
+    updateSheetRow: function (id, patch) {
+      var r = (load().sheet || []).find(function (x) { return x.id === id; });
+      if (r) { Object.assign(r, patch); save(); }
+    },
+    deleteSheetRow: function (id) {
+      var s = load(); s.sheet = (s.sheet || []).filter(function (x) { return x.id !== id; }); save();
+    },
+
+    /* ---------- Team sync hooks ---------- */
+    setChangeHook: function (fn) { changeHook = fn; },
+    rev: function () { return load().rev || 0; },
+    // Replace local state with a teammate's pulled state (no push echo).
+    applyRemote: function (payload) {
+      if (!payload || !payload.state || !Array.isArray(payload.state.companies)) return false;
+      suppressHook = true;
+      state = normalize(payload.state);
+      if (typeof payload.rev === "number") state.rev = payload.rev;
+      save();
+      suppressHook = false;
+      return true;
+    },
+    // Bump the revision before a push so the server can order writes.
+    bumpRev: function () { var s = load(); s.rev = (s.rev || 0) + 1; suppressHook = true; save(); suppressHook = false; return s.rev; }
+  };
+
+  // Company status = the "best" of its contacts (green > yellow > red).
+  // Only rolls up when there are people; carries lastReplyAt/lastEmailAt across.
+  var STATUS_RANK = { red: 0, yellow: 1, green: 2 };
+  function rollupCompany(c) {
+    if (!c.people || !c.people.length) return;
+    var best = "red", bestRank = -1, replyAt = c.lastReplyAt, emailAt = c.lastEmailAt;
+    c.people.forEach(function (p) {
+      var rank = STATUS_RANK[p.status] || 0;
+      if (rank > bestRank) { bestRank = rank; best = p.status; }
+      if (p.lastReplyAt && (!replyAt || p.lastReplyAt > replyAt)) replyAt = p.lastReplyAt;
+      if (p.lastEmailAt && (!emailAt || p.lastEmailAt > emailAt)) emailAt = p.lastEmailAt;
+    });
+    c.status = best;
+    c.lastReplyAt = replyAt || c.lastReplyAt;
+    c.lastEmailAt = emailAt || c.lastEmailAt;
+  }
+  App.rollupCompany = rollupCompany;
+
+  // materials column can be "copper-cathode;al-sows" or "Copper cathode, Aluminium sows"
+  function parseMaterials(val) {
+    if (!val) return [];
+    return String(val).split(/[;,|]/).map(function (token) {
+      token = token.trim();
+      if (!token) return null;
+      var byId = App.productById(token);
+      if (byId) return byId.id;
+      var lower = token.toLowerCase();
+      var match = App.PRODUCTS.find(function (p) {
+        return p.name.toLowerCase().indexOf(lower) !== -1 || lower.indexOf(p.name.toLowerCase()) !== -1;
+      });
+      return match ? match.id : null;
+    }).filter(Boolean);
+  }
+
+  App.Store = Store;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   prices.js  —  formatting, derived values, optional live feed
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var Prices = {
+    fmt: function (v) {
+      if (v === null || v === undefined || v === "" || isNaN(v)) return "—";
+      return Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    },
+
+    // Convert a stored USD value to the chosen display currency.
+    toDisplay: function (usd) {
+      if (usd == null || isNaN(usd)) return null;
+      var s = App.Store.settings();
+      var fx = App.Store.prices().fx;
+      if (s.displayCurrency === "EUR" && fx) return Number(usd) / Number(fx);
+      return Number(usd);
+    },
+    currencySymbol: function () {
+      return App.Store.settings().displayCurrency === "EUR" ? "€" : "$";
+    },
+    // Formatted money in the display currency, e.g. "€8,540".
+    money: function (usd) {
+      var v = this.toDisplay(usd);
+      if (v == null) return "—";
+      return this.currencySymbol() + this.fmt(v);
+    },
+
+    // The all-in aluminium price your buyers actually pay in the EU = LME + premium.
+    aluminiumAllIn: function (prices) {
+      var row = prices.rows.aluminium || {};
+      if (row.value == null) return null;
+      return Number(row.value) + Number(row.premium || 0);
+    },
+
+    // Rough indicative brass value (no LME contract): ~60% Cu + ~37% Zn.
+    // Purely a helper for your quoting — clearly indicative, not a quote.
+    brassIndicative: function (prices) {
+      var cu = prices.rows.copper && prices.rows.copper.value;
+      var zn = prices.rows.zinc && prices.rows.zinc.value;
+      if (cu == null || zn == null) return null;
+      return Math.round(cu * 0.60 + zn * 0.37);
+    },
+
+    // % change of a row vs its previous value (for the ticker arrows/colors).
+    changePct: function (row) {
+      if (!row || row.value == null || row.prev == null || Number(row.prev) === 0) return null;
+      return (Number(row.value) - Number(row.prev)) / Number(row.prev) * 100;
+    },
+
+    // Tiny inline SVG sparkline from a series of numbers.
+    sparkline: function (series, color) {
+      if (!series || series.length < 2) return "";
+      var w = 74, h = 22, n = series.length;
+      var min = Math.min.apply(null, series), max = Math.max.apply(null, series);
+      var range = (max - min) || 1;
+      var pts = series.map(function (v, i) {
+        var x = (i / (n - 1)) * w;
+        var y = h - ((v - min) / range) * (h - 3) - 1.5;
+        return x.toFixed(1) + "," + y.toFixed(1);
+      }).join(" ");
+      var c = color || (series[n - 1] >= series[0] ? "#46d07f" : "#ef5a5a");
+      return '<svg class="tk-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h +
+        '" preserveAspectRatio="none"><polyline points="' + pts + '" fill="none" stroke="' + c +
+        '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+    },
+
+    ageText: function (ts) {
+      if (!ts) return "never updated";
+      var mins = Math.round((Date.now() - ts) / 60000);
+      if (mins < 1) return "updated just now";
+      if (mins < 60) return "updated " + mins + " min ago";
+      var hrs = Math.round(mins / 60);
+      if (hrs < 24) return "updated " + hrs + "h ago";
+      var days = Math.round(hrs / 24);
+      return "updated " + days + "d ago";
+    },
+
+    /* ------------------------------------------------------------
+       Live feed. The source is chosen in Settings → Live prices:
+         • "metalsapi" — fetch directly from Metals-API in the browser
+                         (works on the hosted site; needs a free key)
+         • "custom"    — any CORS-enabled URL returning normalized JSON
+         • "proxy"     — the local Node proxy's /api/prices (needs it running)
+       window.App.PRICE_FEED_URL still overrides everything.
+       ------------------------------------------------------------ */
+    source: function () {
+      return (App.Store.settings().priceSource || "free");
+    },
+
+    feedUrl: function () {
+      if (App.PRICE_FEED_URL) return App.PRICE_FEED_URL;
+      var base = (App.Store.settings().apolloProxyUrl || "http://localhost:8787").replace(/\/+$/, "");
+      return base + "/api/prices";
+    },
+
+    // Calibrate a raw provider rate to USD/tonne (provider units vary).
+    calibrate: function (raw) {
+      var s = App.Store.settings();
+      if (raw == null || isNaN(raw)) return null;
+      var v = Number(raw);
+      if (s.priceInvert !== false && v !== 0) v = 1 / v;   // metals-api returns base/symbol
+      var unitMult = s.priceUnit === "lb" ? 2204.62 : (s.priceUnit === "oz" ? 32150.7 : 1);
+      v = v * unitMult * (Number(s.priceMult) || 1);
+      return Math.round(v);
+    },
+
+    fetchLive: function (force) {
+      var src = App.PRICE_FEED_URL ? "proxy" : this.source();
+      if (src === "manual") return Promise.reject(new Error("Live prices are set to Manual (Settings → Live prices)."));
+      if (src === "free") return this.fetchFreeNoKey();
+      if (src === "metalsapi") return this.fetchMetalsApiDirect();
+      if (src === "custom") return this.fetchCustomDirect();
+      return this.fetchProxy(force);
+    },
+
+    /* Free, NO API KEY: pulls Gold/Copper/Aluminium from Yahoo Finance via a
+       public CORS relay (works on the hosted site). LME Zinc/Lead/Nickel and
+       premiums aren't on any reliable free source — leave those manual. */
+    fetchFreeNoKey: function () {
+      var Y = "https://query1.finance.yahoo.com/v8/finance/chart/";
+      var relays = [
+        function (u) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(u); },
+        function (u) { return "https://corsproxy.io/?url=" + encodeURIComponent(u); }
+      ];
+      var defs = [
+        { k: "gold", sym: "GC=F", mult: 1 },         // USD / troy oz
+        { k: "copper", sym: "HG=F", mult: 2204.62 }, // COMEX USD/lb -> USD/MT
+        { k: "aluminium", sym: "ALI=F", mult: 1 },   // USD / MT
+        { k: "fx", sym: "EURUSD=X", mult: 1, fx: true } // USD per 1 EUR
+      ];
+      function getJson(url) {
+        var i = 0;
+        function attempt() {
+          return fetch(relays[i](url)).then(function (r) {
+            if (!r.ok) throw new Error("relay " + r.status);
+            return r.json();
+          }).catch(function (e) { i++; if (i < relays.length) return attempt(); throw e; });
+        }
+        return attempt();
+      }
+      var out = { currency: "USD", source: "Free web feed (Yahoo Finance, delayed)", asOf: Date.now(), delayed: true, prevs: {}, series: {} };
+      return Promise.all(defs.map(function (d) {
+        var url = Y + d.sym + "?interval=1d&range=5d";
+        return getJson(url).then(function (j) {
+          var res = j && j.chart && j.chart.result && j.chart.result[0];
+          var meta = res && res.meta;
+          if (!meta || meta.regularMarketPrice == null) return;
+          if (d.fx) { out.fx = Number(meta.regularMarketPrice); return; }
+          out[d.k] = Math.round(meta.regularMarketPrice * d.mult);
+          var pc = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
+          if (pc != null) out.prevs[d.k] = Math.round(pc * d.mult);
+          var q = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
+          if (q && Array.isArray(q.close)) {
+            var s = q.close.filter(function (x) { return x != null && !isNaN(x); }).map(function (x) { return Math.round(x * d.mult); });
+            if (s.length) out.series[d.k] = s.slice(-40);
+          }
+        }).catch(function () { /* skip this symbol */ });
+      })).then(function () {
+        if (out.gold == null && out.copper == null && out.aluminium == null) {
+          throw new Error("Free web feed is busy right now — tap ↻ Refresh again, or enter prices manually.");
+        }
+        return out;
+      });
+    },
+
+    fetchProxy: function (force) {
+      var url = this.feedUrl() + (force ? "?force=1" : "");
+      return fetch(url).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Price feed responded " + r.status));
+          return j;
+        });
+      }).catch(function (err) {
+        if (err instanceof TypeError) {
+          throw new Error("Can't reach the price proxy at " + Prices.feedUrl() + ". Is it running? (Or switch the price source to Metals-API in Settings.)");
+        }
+        throw err;
+      });
+    },
+
+    // Direct browser call to Metals-API (CORS-enabled). Key lives in Settings.
+    fetchMetalsApiDirect: function () {
+      var s = App.Store.settings();
+      if (!s.priceApiKey) {
+        return Promise.reject(new Error("Add your Metals-API key in Settings → Live prices (free at metals-api.com)."));
+      }
+      var map = { copper: "LME-XCU", aluminium: "LME-ALU", zinc: "LME-ZNC", lead: "LME-LEAD", nickel: "LME-NI" };
+      var syms = Object.keys(map).map(function (k) { return map[k]; }).join(",") + ",XAU";
+      var url = "https://metals-api.com/api/latest?access_key=" + encodeURIComponent(s.priceApiKey) +
+                "&base=USD&symbols=" + encodeURIComponent(syms);
+      return fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || j.success === false) {
+          throw new Error((j && j.error && (j.error.info || j.error.message)) || "Metals-API error (check your key/quota).");
+        }
+        var rates = j.rates || {};
+        var out = { currency: "USD", source: "Metals-API (LME, delayed)", asOf: Date.now(), delayed: true };
+        Object.keys(map).forEach(function (metal) {
+          var raw = rates[map[metal]];
+          if (raw == null) raw = rates["USD" + map[metal]];
+          out[metal] = Prices.calibrate(raw);
+        });
+        // Gold is quoted per troy ounce — no tonne/lb conversion.
+        var graw = rates["XAU"]; if (graw == null) graw = rates["USDXAU"];
+        if (graw != null && !isNaN(graw)) out.gold = Math.round((Number(graw) < 1 ? 1 / graw : Number(graw)));
+        if (out.copper == null && out.aluminium == null) {
+          throw new Error("Metals-API returned no LME prices — your plan may not include LME symbols.");
+        }
+        return out;
+      }).catch(function (err) {
+        if (err instanceof TypeError) throw new Error("Couldn't reach Metals-API (network/CORS). Check your connection.");
+        throw err;
+      });
+    },
+
+    fetchCustomDirect: function () {
+      var s = App.Store.settings();
+      if (!s.priceCustomUrl) return Promise.reject(new Error("Set a Custom price URL in Settings → Live prices."));
+      return fetch(s.priceCustomUrl).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Custom feed responded " + r.status));
+          j.asOf = j.asOf || Date.now();
+          j.source = j.source || "Custom feed";
+          return j;
+        });
+      }).catch(function (err) {
+        if (err instanceof TypeError) throw new Error("Couldn't reach the custom price URL (network/CORS).");
+        throw err;
+      });
+    }
+  };
+
+  App.Prices = Prices;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   email.js  —  Gmail compose links + pre-written templates
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var Email = {
+    /* Build a pre-written subject + body for a company, including the
+       products they buy and today's live prices from the panel.
+       Optional `person` targets a specific contact for the greeting. */
+    buildDraft: function (company, person) {
+      var s = App.Store.settings();
+      var prices = App.Store.prices();
+
+      var products = (company.materials || [])
+        .map(function (id) { var p = App.productById(id); return p ? p.name : null; })
+        .filter(Boolean);
+
+      var contactName = (person && person.name) || company.contactName;
+      var greeting = contactName
+        ? "Dear " + firstName(contactName) + ","
+        : "Dear Sir or Madam,";
+
+      var productLines = products.length
+        ? products.map(function (n) { return "  • " + n; }).join("\n")
+        : "  • Copper, aluminium, zinc and lead — full list on request";
+
+      var priceLines = buildPriceBlock(prices);
+      var headline = products.length ? products[0] : "non-ferrous metals";
+
+      // If a default template is set, render it with placeholders.
+      var tplId = s.defaultTemplateId;
+      var tpl = tplId && (s.templates || []).filter(function (t) { return t.id === tplId; })[0];
+      if (tpl) {
+        var map = {
+          "{{contact}}": contactName ? firstName(contactName) : "Sir or Madam",
+          "{{company}}": company.name || "your company",
+          "{{products}}": products.length ? products.join(", ") : "non-ferrous metals",
+          "{{prices}}": priceLines.trim(),
+          "{{me}}": s.senderName || "",
+          "{{myCompany}}": s.companyName || ""
+        };
+        function sub(str) {
+          return String(str || "").replace(/\{\{contact\}\}|\{\{company\}\}|\{\{products\}\}|\{\{prices\}\}|\{\{me\}\}|\{\{myCompany\}\}/g, function (m) { return map[m]; });
+        }
+        return { subject: sub(tpl.subject) || (s.companyName + " — offer"), body: sub(tpl.body) };
+      }
+
+      var subject = products.length
+        ? (headline + (products.length > 1 ? " & more" : "") + " — direct from " + s.companyName)
+        : ("Non-ferrous supply — " + s.companyName);
+
+      // A tighter, trader-style pitch: who we are, what we supply, today's
+      // reference prices, why us, and a single clear call to action.
+      var body =
+        greeting + "\n\n" +
+        "I'm " + s.senderName + (s.senderTitle ? ", " + s.senderTitle : "") +
+        " at " + s.companyName + ", a direct supplier of non-ferrous metals. " +
+        "I'm reaching out because " + (company.name || "your team") +
+        " is active in exactly the material we move, and I'd like to be a reliable second source for you.\n\n" +
+        "What we can supply" + (products.length ? " to you" : "") + ":\n" +
+        productLines + "\n\n" +
+        priceLines +
+        "\nWhy work with us:\n" +
+        "  • Producer-direct pricing, formula-linked to the LME\n" +
+        "  • SGS / pre-shipment inspection and full specs on every lot\n" +
+        "  • CIF or FOB, flexible Incoterms and recurring monthly tonnage\n\n" +
+        "If you can share your current requirement — material, target tonnage and delivery port — " +
+        "I'll come back with a firm offer the same day.\n\n" +
+        "Best regards,\n" +
+        s.senderName + "\n" +
+        (s.senderTitle ? s.senderTitle + "\n" : "") +
+        s.companyName +
+        (s.phone ? "\nTel: " + s.phone : "") +
+        (s.website ? "\n" + s.website : "") +
+        (s.senderEmail ? "\n" + s.senderEmail : "") +
+        (s.signature ? "\n\n" + s.signature : "");
+
+      return { subject: subject, body: body };
+    },
+
+    /* Gmail "compose" deep link — opens a new mail pre-filled, ready to review + send. */
+    composeUrl: function (company, person) {
+      var draft = this.buildDraft(company, person);
+      var to = (person && person.email) || company.email || "";
+      var params =
+        "view=cm&fs=1" +
+        "&to=" + encodeURIComponent(to) +
+        "&su=" + encodeURIComponent(draft.subject) +
+        "&body=" + encodeURIComponent(draft.body);
+      return "https://mail.google.com/mail/?" + params;
+    },
+
+    /* Gmail search link — jumps to the thread with this contact. */
+    threadUrl: function (company) {
+      var email = company.email || "";
+      var q = email
+        ? "(to:" + email + " OR from:" + email + ")"
+        : (company.name || "");
+      return "https://mail.google.com/mail/u/0/#search/" + encodeURIComponent(q);
+    }
+  };
+
+  function firstName(full) {
+    return String(full || "").trim().split(/\s+/)[0] || full;
+  }
+
+  function buildPriceBlock(prices) {
+    var rows = prices.rows || {};
+    var lines = [];
+    function add(label, v) {
+      if (v != null && v !== "" && !isNaN(v)) {
+        lines.push("  • " + label + ": " + Number(v).toLocaleString("en-US") + " " + prices.currency + "/MT");
+      }
+    }
+    add("LME Copper", rows.copper && rows.copper.value);
+    var alAllIn = App.Prices.aluminiumAllIn(prices);
+    if (alAllIn != null) {
+      add("LME Aluminium (incl. EU duty-paid premium)", alAllIn);
+    } else {
+      add("LME Aluminium", rows.aluminium && rows.aluminium.value);
+    }
+    add("LME Zinc", rows.zinc && rows.zinc.value);
+    add("LME Lead", rows.lead && rows.lead.value);
+    add("LME Nickel", rows.nickel && rows.nickel.value);
+
+    if (!lines.length) return "";
+    return "Indicative reference prices today:\n" + lines.join("\n") +
+      "\n(Offers are formula-based on the prevailing exchange price; final price confirmed at contract.)\n";
+  }
+
+  App.Email = Email;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   apollo.js  —  front-end client for the local Apollo proxy
+   ------------------------------------------------------------
+   The browser NEVER sees your Apollo key. It only talks to your
+   proxy (apolloProxyUrl in Settings), which holds the key and
+   calls Apollo server-side. See server/apollo-proxy.js.
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var Apollo = {
+    proxyUrl: function () {
+      var u = (App.Store.settings().apolloProxyUrl || "").trim().replace(/\/+$/, "");
+      return u || "http://localhost:8787";
+    },
+
+    health: function () {
+      return fetch(this.proxyUrl() + "/health").then(function (r) { return r.json(); });
+    },
+
+    /* Find procurement/buyer/trader contacts at one company. */
+    findBuyers: function (company) {
+      var settings = App.Store.settings();
+      var payload = {
+        name: company.name || "",
+        domain: company.website || "",
+        titles: App.BUYER_TITLES,
+        perPage: 10,
+        reveal: !!settings.revealContacts,
+        revealPhone: !!settings.revealContacts && !!settings.revealPhone
+      };
+      return fetch(this.proxyUrl() + "/api/find-buyers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Proxy responded " + r.status));
+          return j;
+        });
+      }).catch(function (err) {
+        // Network/refused usually means the proxy isn't running.
+        if (err instanceof TypeError) {
+          throw new Error("Can't reach the Apollo proxy at " + Apollo.proxyUrl() +
+            ". Start it: node server/apollo-proxy.js (see README).");
+        }
+        throw err;
+      });
+    },
+
+    /* Poll for phone numbers that arrived asynchronously via the Apollo webhook. */
+    getPhones: function (company) {
+      var domain = (company.website || "").trim();
+      return fetch(this.proxyUrl() + "/api/phones?domain=" + encodeURIComponent(domain))
+        .then(function (r) { return r.json(); })
+        .then(function (j) { return j.phones || {}; })
+        .catch(function () { return {}; });
+    },
+
+    /* Discover real companies for a country via Apollo org search. */
+    findCompanies: function (countryName, page) {
+      var payload = { country: countryName, perPage: 25, page: page || 1 };
+      return fetch(this.proxyUrl() + "/api/find-companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Proxy responded " + r.status));
+          return j;
+        });
+      }).catch(function (err) {
+        if (err instanceof TypeError) {
+          throw new Error("Can't reach the Apollo proxy at " + Apollo.proxyUrl() + ". Start it (see README).");
+        }
+        throw err;
+      });
+    }
+  };
+
+  App.Apollo = Apollo;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   gmail.js  —  front-end client for Gmail auto-status sync
+   ------------------------------------------------------------
+   Talks to the same local proxy as Apollo. The proxy holds the
+   Google OAuth tokens (read-only Gmail scope); the browser never
+   sees them. Used to auto-update traffic-light status:
+     reply from buyer -> green ;  you contacted them -> yellow.
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var Gmail = {
+    base: function () {
+      var u = (App.Store.settings().apolloProxyUrl || "").trim().replace(/\/+$/, "");
+      return u || "http://localhost:8787";
+    },
+
+    status: function () {
+      return fetch(this.base() + "/api/gmail/status")
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { configured: false, connected: false, unreachable: true }; });
+    },
+
+    connectUrl: function () { return this.base() + "/api/gmail/auth"; },
+
+    /* Ask the proxy which of these emails have replied / been contacted. */
+    check: function (emails) {
+      return fetch(this.base() + "/api/gmail/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: emails })
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Proxy responded " + r.status));
+          return j.results || {};
+        });
+      }).catch(function (err) {
+        if (err instanceof TypeError) {
+          throw new Error("Can't reach the proxy at " + Gmail.base() + ". Start it first (see README).");
+        }
+        throw err;
+      });
+    }
+  };
+
+  App.Gmail = Gmail;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   sync.js  —  optional team sync (shared data via the proxy)
+   ------------------------------------------------------------
+   When "Team sync" is enabled in Settings, the app pulls the
+   shared state from the proxy's /api/data on load and pushes
+   local changes back (debounced). Last-write-wins — best for a
+   small desk; teammates click "Pull" to grab the latest.
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var pushTimer = null;
+
+  var Sync = {
+    enabled: function () { return !!App.Store.settings().teamSync; },
+
+    url: function () {
+      var s = App.Store.settings();
+      var base = (s.syncServerUrl || s.apolloProxyUrl || "http://localhost:8787").trim().replace(/\/+$/, "");
+      return base + "/api/data";
+    },
+
+    headers: function () {
+      var h = { "Content-Type": "application/json" };
+      var t = App.Store.settings().syncToken;
+      if (t) h["X-Data-Token"] = t;
+      return h;
+    },
+
+    pull: function () {
+      return fetch(this.url(), { headers: this.headers() }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || ("Sync server " + r.status));
+          return j; // { state, rev, updatedAt }
+        });
+      });
+    },
+
+    push: function () {
+      var payload = { state: App.Store.get() };
+      return fetch(this.url(), { method: "PUT", headers: this.headers(), body: JSON.stringify(payload) })
+        .then(function (r) {
+          return r.json().then(function (j) {
+            if (!r.ok) throw new Error(j.error || ("Sync server " + r.status));
+            return j; // { rev, updatedAt }
+          });
+        });
+    },
+
+    // Debounced auto-push, wired as the Store change hook.
+    schedulePush: function () {
+      if (!Sync.enabled()) return;
+      clearTimeout(pushTimer);
+      pushTimer = setTimeout(function () {
+        Sync.push().catch(function (e) { console.warn("[sync] push failed:", e.message); });
+      }, 1500);
+    },
+
+    // Called once at boot: pull shared state, then listen for local edits.
+    init: function (onPulled) {
+      App.Store.setChangeHook(Sync.schedulePush);
+      if (!Sync.enabled()) return;
+      Sync.pull().then(function (j) {
+        if (j && j.state && App.Store.applyRemote(j) && onPulled) onPulled();
+      }).catch(function (e) { console.warn("[sync] initial pull failed:", e.message); });
+    }
+  };
+
+  App.Sync = Sync;
+
+})(window.App);
+
+</script>
+  <script>
+/* ============================================================
+   app.js  —  views, routing, interactivity (vanilla, no deps)
+   ============================================================ */
+window.App = window.App || {};
+
+(function (App) {
+  "use strict";
+
+  var Store = App.Store, Prices = App.Prices, Email = App.Email;
+
+  /* in-memory view state */
+  var route = { view: "dashboard", country: null };
+  var query = "";
+  var filterStatus = "";   // "", red, yellow, green
+  var filterMetal = "";    // "", or a product metal key
+
+  /* ---------- tiny helpers ---------- */
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function $(id) { return document.getElementById(id); }
+  function metal(id) { return App.METALS[id] || { label: id, color: "#888" }; }
+  function opt(value, label, current) {
+    return '<option value="' + esc(value) + '"' + (current === value ? " selected" : "") + ">" + esc(label) + "</option>";
+  }
+
+  function toast(msg) {
+    var root = $("toast-root");
+    root.innerHTML = '<div class="toast">' + esc(msg) + "</div>";
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { root.innerHTML = ""; }, 2600);
+  }
+  App.toast = toast;
+
+  /* =========================================================
+     PRICE BAR
+     ========================================================= */
+  function renderPriceBar() {
+    var p = Store.prices();
+    var ccy = Store.settings().displayCurrency || "USD";
+    var dateStr = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
+
+    function changeHtml(row) {
+      var pct = Prices.changePct(row);
+      if (pct == null) return "";
+      var cls = pct > 0 ? "up" : (pct < 0 ? "down" : "flat");
+      var sign = pct > 0 ? "+" : "";
+      return ' <span class="tk-chg ' + cls + '">' + sign + pct.toFixed(2) + "%</span>";
+    }
+
+    var cards = App.TICKER.map(function (t) {
+      var row = p.rows[t.key] || {};
+      var val, sub, chg = "", spark = "";
+      if (t.kind === "premium") {
+        val = row.premium;
+        sub = esc(t.unit);
+      } else {
+        val = row.value;
+        chg = changeHtml(row);
+        sub = ccy + " " + esc(t.unit) + " · " + esc(dateStr);
+        var pct = Prices.changePct(row);
+        spark = Prices.sparkline(row.series, pct == null ? null : (pct >= 0 ? "#46d07f" : "#ef5a5a"));
+      }
+      return '<div class="tk">' +
+        '<div class="tk-label">' + esc(t.label) + "</div>" +
+        '<div class="tk-price">' + Prices.money(val) + chg + "</div>" +
+        '<div class="tk-foot">' + (spark || '<span class="tk-spark-empty"></span>') + '<span class="tk-sub">' + sub + "</span></div>" +
+      "</div>";
+    }).join("");
+
+    var live = Store.settings().priceLiveSeconds > 0 ? '<span class="tk-live">● LIVE</span>' : "";
+    var delayed = p.delayed ? "delayed/indicative" : "manual";
+    var noFx = (ccy === "EUR" && !p.fx);
+    var ccyToggle = '<button class="btn sm" data-action="toggle-currency" title="Switch USD / EUR">' +
+      (ccy === "EUR" ? "€ EUR" : "$ USD") + (noFx ? " ⚠️" : "") + "</button>";
+    var warn = App.priceMsg
+      ? '<span class="price-warn" data-nav="settings" title="Open price settings">⚠️ ' + esc(App.priceMsg) + "</span>"
+      : (!p.updatedAt ? '<span class="price-warn" data-nav="settings">⚠️ set up live prices</span>' : "");
+
+    $("pricebar").innerHTML =
+      '<div class="ticker">' + cards + "</div>" +
+      '<div class="pb-meta">' + live +
+        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + ccyToggle +
+        '<button class="btn sm" data-action="refresh-prices">↻ Refresh</button>' +
+        '<button class="btn sm primary" data-action="edit-prices">Edit</button>' +
+      "</div>";
+  }
+
+  /* =========================================================
+     SIDEBAR NAV
+     ========================================================= */
+  function renderNav() {
+    var companies = Store.companies();
+    function item(view, country, icon, label, count) {
+      var active = (route.view === view && route.country === country) ? " active" : "";
+      var attr = country ? 'data-nav="country:' + country + '"' : 'data-nav="' + view + '"';
+      var c = count != null ? '<span class="count">' + count + "</span>" : "";
+      return '<div class="nav-item' + active + '" ' + attr + '>' +
+        "<span>" + icon + "</span><span>" + esc(label) + "</span>" + c + "</div>";
+    }
+
+    var top =
+      item("dashboard", null, "📊", "Dashboard") +
+      item("companies", null, "🏢", "All buyers", companies.length) +
+      item("sheet", null, "📝", "Custom sheet", Store.sheetRows().length || null) +
+      item("products", null, "🪙", "Products", App.PRODUCTS.length) +
+      item("settings", null, "⚙️", "Settings");
+
+    function countWith(code) { return companies.filter(function (x) { return x.country === code; }).length; }
+
+    // Show all 27 EU member states (even with no buyers yet).
+    var euItems = App.COUNTRIES.map(function (c) { return item("country", c.code, c.flag, c.name, countWith(c.code)); }).join("");
+    var euSection = '<div class="nav-section"><div class="label">EU Countries (27)</div>' + euItems + "</div>";
+
+    // My countries: always show every custom country the user added.
+    var custom = Store.customCountries();
+    var customItems = custom.map(function (c) { return item("country", c.code, c.flag, c.name, countWith(c.code)); }).join("");
+    var mySection = '<div class="nav-section"><div class="label">My countries</div>' + customItems +
+      '<div class="nav-item" data-action="add-country"><span>＋</span><span>Add country</span></div></div>';
+
+    $("nav").innerHTML =
+      '<div class="nav-section">' + top + "</div>" +
+      euSection + mySection +
+      '<div class="nav-version" title="Live build version">' + esc(App.VERSION || "") + "</div>";
+  }
+
+  /* =========================================================
+     VIEWS
+     ========================================================= */
+  function render() {
+    renderPriceBar();
+    renderNav();
+    var c = $("content");
+    if (route.view === "dashboard") c.innerHTML = viewDashboard();
+    else if (route.view === "products") c.innerHTML = viewProducts();
+    else if (route.view === "sheet") c.innerHTML = viewSheet();
+    else if (route.view === "settings") c.innerHTML = viewSettings();
+    else if (route.view === "companies") c.innerHTML = viewCompanies(null);
+    else if (route.view === "country") c.innerHTML = viewCompanies(route.country);
+    if (route.view === "settings") refreshGmailStatus();
+    var s = c.querySelector(".search");
+    if (s) s.focus();
+  }
+  App.render = render;
+
+  /* ---- Dashboard ---- */
+  function buyersBuyingMetal(rowKey) {
+    var metalKey = rowKey === "nickel" ? "stainless" : rowKey;
+    return Store.companies().filter(function (c) {
+      return (c.materials || []).some(function (id) { var p = App.productById(id); return p && p.metal === metalKey; });
+    });
+  }
+  function viewDashboard() {
+    var all = Store.companies();
+    var red = all.filter(function (c) { return c.status === "red"; }).length;
+    var yellow = all.filter(function (c) { return c.status === "yellow"; }).length;
+    var green = all.filter(function (c) { return c.status === "green"; }).length;
+    var withReply = all.filter(function (c) { return c.status === "green"; });
+
+    var replyBanner = withReply.length
+      ? '<div class="notice">📬 <strong>' + withReply.length + " buyer(s) replied</strong> — go read and follow up: " +
+        withReply.map(function (c) { return esc(c.name); }).join(", ") + "</div>"
+      : "";
+
+    // All 27 EU countries plus any custom countries.
+    var tileCountries = App.COUNTRIES.concat(Store.customCountries());
+    var tiles = tileCountries.map(function (c) {
+      var list = Store.companiesByCountry(c.code);
+      var dots = ["red", "yellow", "green"].map(function (st) {
+        var n = list.filter(function (x) { return x.status === st; }).length;
+        return n ? '<span class="mini-dot" style="background:var(--' + st + ')" title="' + n + " " + st + '"></span>' : "";
+      }).join("");
+      return '<div class="tile" data-nav="country:' + c.code + '">' +
+        '<span class="flag">' + c.flag + "</span>" +
+        "<div><div class=\"tname\">" + esc(c.name) + "</div>" +
+        '<div class="tsub">' + list.length + " buyer" + (list.length === 1 ? "" : "s") + "</div></div>" +
+        '<span class="mini-lights">' + dots + "</span></div>";
+    }).join("");
+
+    var contacted = yellow + green;
+    var total = all.length || 1;
+    var contactRate = Math.round(contacted / total * 100);
+    var replyRate = contacted ? Math.round(green / contacted * 100) : 0;
+
+    // Follow-up reminders: stuck on 'awaiting reply' beyond the threshold.
+    var followDays = Number(Store.settings().followUpDays) || 4;
+    var now = Date.now();
+    var followUps = all.filter(function (c) { return c.status === "yellow" && c.lastEmailAt && (now - c.lastEmailAt) > followDays * 86400000; });
+    var followHtml = followUps.length
+      ? '<div class="card" style="margin-bottom:16px;"><h3>⏰ Needs follow-up (' + followUps.length + ")</h3>" +
+        '<div class="meta">No reply after ' + followDays + " days — give them a nudge.</div><div class=\"followups\">" +
+        followUps.slice(0, 15).map(function (c) {
+          var days = Math.floor((now - c.lastEmailAt) / 86400000);
+          return '<div class="fu"><span class="fu-name" data-nav="country:' + c.country + '">' + esc(c.name) + "</span>" +
+            '<span class="fu-days">' + days + "d</span>" +
+            '<button class="btn sm primary" data-action="send-email" data-id="' + c.id + '">✉️ Follow up</button></div>';
+        }).join("") + "</div></div>"
+      : "";
+
+    // Price-move alerts: metals that moved more than the alert threshold.
+    var alertPct = Number(Store.settings().alertPct) || 2;
+    var pr = Store.prices();
+    var moves = [];
+    ["copper", "aluminium", "zinc", "lead", "nickel"].forEach(function (mk) {
+      var pct = Prices.changePct(pr.rows[mk]);
+      if (pct != null && Math.abs(pct) >= alertPct) moves.push({ key: mk, pct: pct });
+    });
+    var alertHtml = moves.length
+      ? '<div class="notice warn" style="margin-bottom:16px;">📈 <strong>Market moves</strong> — act on these: ' +
+        moves.map(function (m) {
+          var pm = m.key === "nickel" ? "stainless" : m.key;
+          var n = buyersBuyingMetal(m.key).length;
+          var arrow = m.pct >= 0 ? "▲" : "▼";
+          var lbl = (App.METALS[m.key === "nickel" ? "stainless" : m.key] || {}).label || m.key;
+          return '<span class="alert-chip" data-action="alert-filter" data-metal="' + pm + '">' +
+            esc(lbl) + " " + arrow + Math.abs(m.pct).toFixed(1) + "% · " + n + " buyers</span>";
+        }).join(" ") + "</div>"
+      : "";
+
+    return '<div class="page-head"><div><h2>Sales Dashboard</h2>' +
+      '<div class="sub">Track non-ferrous buyers across all 27 EU member states.</div></div>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn" data-action="sync-gmail">📥 Sync Gmail</button>' +
+      '<button class="btn primary" data-action="add-company">+ Add buyer</button></div>' +
+      replyBanner + alertHtml + followHtml +
+      '<div class="stat-row">' +
+        stat(all.length, "Total buyers") +
+        statDot(red, "Not contacted", "red") +
+        statDot(yellow, "Awaiting reply", "yellow") +
+        statDot(green, "Replied", "green") +
+        stat(contactRate + "%", "Contacted") +
+        stat(replyRate + "%", "Reply rate") +
+      "</div>" +
+      '<h3 style="margin:6px 0 12px;">Coverage by country</h3>' +
+      '<div class="tiles">' + tiles + "</div>";
+  }
+  function stat(n, l) { return '<div class="stat"><div class="n">' + n + '</div><div class="l">' + esc(l) + "</div></div>"; }
+  function statDot(n, l, color) {
+    return '<div class="stat"><div class="n" style="color:var(--' + color + ')">' + n + "</div>" +
+      '<div class="l"><span class="dot" style="background:var(--' + color + ')"></span> ' + esc(l) + "</div></div>";
+  }
+
+  /* ---- Products ---- */
+  function viewProducts() {
+    var groups = {};
+    App.PRODUCTS.forEach(function (p) { (groups[p.metal] = groups[p.metal] || []).push(p); });
+    var html = Object.keys(groups).map(function (mk) {
+      var m = metal(mk);
+      var items = groups[mk].map(function (p) {
+        return '<div class="tag"><span class="swatch" style="background:' + m.color + '"></span>' +
+          esc(p.name) + ' <small style="color:var(--muted)">· ' + esc(p.type) + "</small></div>";
+      }).join("");
+      return '<div class="card"><h3><span class="dot" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' +
+        m.color + ';margin-right:7px;"></span>' + esc(m.label) + "</h3>" +
+        '<div class="meta">' + groups[mk].length + " product(s) · priced off " +
+        (m.lmeKey ? "LME " + esc(m.lmeKey) : "derived / index") + "</div>" +
+        '<div class="tags">' + items + "</div></div>";
+    }).join("");
+
+    return '<div class="page-head"><div><h2>Your Products</h2>' +
+      '<div class="sub">25 non-ferrous products, grouped by base metal &amp; pricing source.</div></div></div>' +
+      '<div class="grid cards">' + html + "</div>";
+  }
+
+  /* ---- Custom sheet (free-form, Excel-style) ---- */
+  function viewSheet() {
+    var rows = Store.sheetRows();
+    var prodOpts = App.PRODUCTS.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join("");
+
+    function row(r) {
+      var csel = '<select onchange="App.onSheetEdit(\'' + r.id + '\',\'country\',this.value)">' +
+        '<option value=""' + (!r.country ? " selected" : "") + ">—</option>" +
+        App.allCountries().map(function (x) {
+          return '<option value="' + x.code + '"' + (r.country === x.code ? " selected" : "") + ">" + x.flag + " " + esc(x.name) + "</option>";
+        }).join("") + "</select>";
+      return "<tr>" +
+        '<td><input list="sheet-prod" value="' + esc(r.product) + '" placeholder="product" onchange="App.onSheetEdit(\'' + r.id + '\',\'product\',this.value)"/></td>' +
+        "<td>" + csel + "</td>" +
+        '<td><input value="' + esc(r.material) + '" placeholder="material" onchange="App.onSheetEdit(\'' + r.id + '\',\'material\',this.value)"/></td>' +
+        '<td><input value="' + esc(r.qty) + '" placeholder="qty / MT" onchange="App.onSheetEdit(\'' + r.id + '\',\'qty\',this.value)"/></td>' +
+        '<td><input value="' + esc(r.notes) + '" placeholder="notes" onchange="App.onSheetEdit(\'' + r.id + '\',\'notes\',this.value)"/></td>' +
+        '<td><button class="btn sm danger" data-action="sheet-del" data-id="' + r.id + '">🗑</button></td>' +
+        "</tr>";
+    }
+
+    var body = rows.length
+      ? '<table class="sheet"><thead><tr><th>Product</th><th>Country</th><th>Material</th><th>Qty</th><th>Notes</th><th></th></tr></thead><tbody>' +
+        rows.map(row).join("") + "</tbody></table>"
+      : '<div class="empty"><div class="big">📝</div><p>Empty sheet — add your first row.</p></div>';
+
+    return '<datalist id="sheet-prod">' + prodOpts + "</datalist>" +
+      '<div class="page-head"><div><h2>Custom Sheet</h2>' +
+      '<div class="sub">A free-form tab — log any product, country and material combination, like an extra Excel sheet. Saved automatically.</div></div>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn primary" data-action="sheet-add">+ Add row</button></div>' +
+      body;
+  }
+
+  /* ---- Companies (all or by country) ---- */
+  function viewCompanies(countryCode) {
+    var list = countryCode ? Store.companiesByCountry(countryCode) : Store.companies();
+    var title, sub;
+    if (countryCode) {
+      var c = App.countryByCode(countryCode);
+      title = c.flag + " " + c.name; sub = "Buyers in " + c.name + " · target top 50";
+    } else {
+      title = "All Buyers"; sub = "Every buyer across the EU";
+    }
+
+    if (query) {
+      var q = query.toLowerCase();
+      list = list.filter(function (x) {
+        return (x.name || "").toLowerCase().indexOf(q) !== -1 ||
+               (x.email || "").toLowerCase().indexOf(q) !== -1 ||
+               (x.city || "").toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    if (filterStatus) list = list.filter(function (x) { return (x.status || "red") === filterStatus; });
+    if (filterMetal) list = list.filter(function (x) {
+      return (x.materials || []).some(function (id) { var pp = App.productById(id); return pp && pp.metal === filterMetal; });
+    });
+
+    var statusOpts = [["", "All statuses"], ["red", "🔴 Not contacted"], ["yellow", "🟡 Awaiting reply"], ["green", "🟢 Replied"]]
+      .map(function (o) { return '<option value="' + o[0] + '"' + (filterStatus === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("");
+    var metalOpts = '<option value="">All materials</option>' + Object.keys(App.METALS).map(function (mk) {
+      return '<option value="' + mk + '"' + (filterMetal === mk ? " selected" : "") + ">" + esc(App.METALS[mk].label) + "</option>";
+    }).join("");
+    var filtersBar = '<div class="filters">' +
+      '<select class="search" onchange="App.onFilter(\'status\',this.value)">' + statusOpts + "</select>" +
+      '<select class="search" onchange="App.onFilter(\'metal\',this.value)">' + metalOpts + "</select>" +
+      ((filterStatus || filterMetal) ? '<button class="btn sm" data-action="clear-filters">✕ Clear filters</button>' : "") +
+      '<span class="status-text">' + list.length + " shown</span></div>";
+
+    var head = '<div class="page-head"><div><h2>' + esc(title) + "</h2>" +
+      '<div class="sub">' + esc(sub) + "</div></div>" +
+      '<div class="spacer"></div>' +
+      '<input class="search" placeholder="Search name, email, city…" value="' + esc(query) + '" oninput="App.onSearch(this.value)"/>' +
+      '<button class="btn" data-action="bulk-find"' + (countryCode ? ' data-country="' + countryCode + '"' : "") + '>👥 Find buyers (all)</button>' +
+      (countryCode ? '<button class="btn" data-action="discover-companies" data-country="' + countryCode + '">🔎 Discover companies</button>' : "") +
+      '<button class="btn" data-action="sync-gmail">📥 Sync Gmail</button>' +
+      '<button class="btn" data-action="import">⇪ Import CSV</button>' +
+      '<button class="btn" data-action="export">⇩ Export</button>' +
+      ((countryCode && App.countryByCode(countryCode) && App.countryByCode(countryCode).custom)
+        ? '<button class="btn danger" data-action="remove-country" data-country="' + countryCode + '">🗑 Remove country</button>' : "") +
+      '<button class="btn primary" data-action="add-company"' + (countryCode ? ' data-country="' + countryCode + '"' : "") + '>+ Add buyer</button></div>' +
+      filtersBar;
+
+    var legend = '<div class="legend" style="margin-bottom:14px;">' +
+      '<span><span class="dot" style="background:var(--red)"></span>Not contacted</span>' +
+      '<span><span class="dot" style="background:var(--yellow)"></span>Awaiting reply</span>' +
+      '<span><span class="dot" style="background:var(--green)"></span>Replied</span>' +
+      '<span>· Click a light to set status. Click 🟢 / “Send email” to open Gmail.</span></div>';
+
+    if (!list.length) {
+      return head + legend + '<div class="empty"><div class="big">🗂️</div>' +
+        "<p>No buyers here yet.</p>" +
+        '<button class="btn primary" data-action="add-company"' + (countryCode ? ' data-country="' + countryCode + '"' : "") + '>+ Add the first buyer</button>' +
+        ' <button class="btn" data-action="import">⇪ Import from CSV</button></div>';
+    }
+
+    var cards = list.map(companyCard).join("");
+    return head + legend + '<div class="grid cards">' + cards + "</div>";
+  }
+
+  function companyCard(c) {
+    var country = App.countryByCode(c.country);
+    var tags = (c.materials || []).map(function (id) {
+      var p = App.productById(id); if (!p) return "";
+      var m = metal(p.metal);
+      return '<span class="tag"><span class="swatch" style="background:' + m.color + '"></span>' + esc(p.name) + "</span>";
+    }).join("") || '<span class="status-text">No products assigned yet</span>';
+
+    var light = function (st, label) {
+      return '<button class="light ' + st + (c.status === st ? " on" : "") + '" title="' + label +
+        '" data-action="status" data-status="' + st + '" data-id="' + c.id + '"></button>';
+    };
+
+    var statusText = {
+      red: "Not contacted yet",
+      yellow: c.lastEmailAt ? "Emailed " + new Date(c.lastEmailAt).toLocaleDateString() + " · awaiting reply" : "Awaiting reply",
+      green: "Replied" + (c.lastReplyAt ? " " + new Date(c.lastReplyAt).toLocaleDateString() : "")
+    }[c.status] || "";
+
+    var replyBadge = c.status === "green"
+      ? '<span class="reply-badge" data-action="open-thread" data-id="' + c.id + '">📬 Read reply</span>' : "";
+
+    var people = (c.people || []).map(function (p, idx) {
+      var mail = p.email
+        ? '<span class="person-mail" data-action="person-email" data-id="' + c.id + '" data-idx="' + idx + '" title="Email ' + esc(p.name) + '">✉️</span>'
+        : (p.locked ? '<span class="person-locked" title="Email locked in Apollo — enable Reveal in Settings">🔒</span>' : "");
+      var li = p.linkedin ? ' <a href="' + esc(p.linkedin) + '" target="_blank" rel="noopener" title="LinkedIn">in</a>' : "";
+      var thread = p.email
+        ? '<span class="person-thread" data-action="person-thread" data-id="' + c.id + '" data-idx="' + idx + '" title="Open this contact\'s Gmail thread">🔎</span>' : "";
+      var pst = p.status || "red";
+      var lights = ["red", "yellow", "green"].map(function (st) {
+        return '<button class="plight ' + st + (pst === st ? " on" : "") +
+          '" data-action="person-status" data-id="' + c.id + '" data-idx="' + idx + '" data-status="' + st + '" title="' +
+          ({ red: "Not contacted", yellow: "Awaiting reply", green: "Replied" }[st]) + '"></button>';
+      }).join("");
+      return '<div class="person">' +
+        '<span class="p-name">' + esc(p.name || "—") + "</span>" +
+        '<span class="p-title">' + esc(p.title || "") + "</span>" +
+        (p.email ? '<span class="p-email">' + esc(p.email) + "</span>" : "") +
+        (p.phone ? '<span class="p-email">📞 ' + esc(p.phone) + "</span>" : "") +
+        '<span class="p-actions">' +
+          '<span class="plights">' + lights + "</span>" +
+          mail + thread + li +
+          '<span class="person-del" data-action="del-person" data-id="' + c.id + '" data-idx="' + idx + '" title="Remove">✕</span>' +
+        "</span></div>";
+    }).join("");
+    var peopleBlock = (c.people && c.people.length)
+      ? '<div class="people"><div class="people-h">👥 Buyers / procurement (' + c.people.length + ")" +
+        '<span class="people-refresh" data-action="refresh-phones" data-id="' + c.id + '" title="Pull phone numbers that arrived via Apollo webhook">↻ phones</span>' +
+        "</div>" + people + "</div>"
+      : "";
+
+    return '<div class="card">' +
+      '<div style="display:flex;align-items:flex-start;gap:8px;">' +
+        "<div style=\"flex:1;min-width:0;\"><h3>" + esc(c.name || "(unnamed buyer)") + "</h3>" +
+        '<div class="meta">' + (country ? country.flag + " " + esc(country.name) : "") +
+          (c.city ? " · " + esc(c.city) : "") +
+          (c.website ? ' · <a href="' + normUrl(c.website) + '" target="_blank" rel="noopener">' + esc(c.website) + "</a>" : "") +
+        "</div></div>" +
+      "</div>" +
+      '<div class="tags">' + tags + "</div>" +
+      (c.contactName ? '<div class="contact-line">👤 ' + esc(c.contactName) + "</div>" : "") +
+      (c.email ? '<div class="contact-line">✉️ ' + esc(c.email) + "</div>" : '<div class="contact-line" style="color:var(--yellow)">✉️ no email — add one to send</div>') +
+      (c.phone ? '<div class="contact-line">📞 ' + esc(c.phone) + "</div>" : "") +
+      peopleBlock +
+      '<div class="status-line">' +
+        '<div class="lights">' + light("red", "Not contacted") + light("yellow", "Awaiting reply") + light("green", "Replied") + "</div>" +
+        '<span class="status-text">' + esc(statusText) + "</span>" + replyBadge +
+      "</div>" +
+      '<div class="card-actions">' +
+        '<button class="btn primary sm" data-action="send-email" data-id="' + c.id + '">✉️ Send email</button>' +
+        '<button class="btn sm" data-action="make-offer" data-id="' + c.id + '">💰 Offer</button>' +
+        '<button class="btn sm" data-action="find-buyers" data-id="' + c.id + '">👥 Find buyers</button>' +
+        '<button class="btn sm" data-action="open-thread" data-id="' + c.id + '">🔎 View thread</button>' +
+        '<button class="btn sm" data-action="edit-company" data-id="' + c.id + '">✎ Edit</button>' +
+        '<button class="btn sm danger" data-action="del-company" data-id="' + c.id + '">🗑</button>' +
+      "</div></div>";
+  }
+
+  function normUrl(u) {
+    if (!u) return "#";
+    return /^https?:\/\//i.test(u) ? u : "https://" + u;
+  }
+
+  /* ---- Settings ---- */
+  function viewSettings() {
+    var s = Store.settings();
+    function f(key, label, ph) {
+      return '<div class="field"><label>' + esc(label) + "</label>" +
+        '<input data-set="' + key + '" value="' + esc(s[key] || "") + '" placeholder="' + esc(ph || "") + '"/></div>';
+    }
+    return '<div class="page-head"><div><h2>Settings</h2>' +
+      '<div class="sub">Your sender identity — used in every pre-written email.</div></div></div>' +
+      '<div class="card" style="max-width:640px;">' +
+        '<div class="field-2">' + f("senderName", "Your name", "Jane Trader") + f("senderTitle", "Title", "Sales Manager") + "</div>" +
+        '<div class="field-2">' + f("companyName", "Company name", "Acme Metals Ltd.") + f("senderEmail", "Your Gmail work address", "you@company.com") + "</div>" +
+        '<div class="field-2">' + f("phone", "Phone", "+1 …") + f("website", "Website", "company.com") + "</div>" +
+        '<div class="field"><label>Extra signature lines (optional)</label><textarea data-set="signature" placeholder="Address, registration no., etc.">' + esc(s.signature || "") + "</textarea></div>" +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div>' +
+      "</div>" +
+      '<div class="notice warn" style="max-width:640px;margin-top:16px;">💡 Statuses can be set manually (click a light) or synced automatically from Gmail (below). Sending always goes through the review-first Gmail compose button.</div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👥 Apollo.io contact finder</h3>' +
+        '<div class="meta">Your Apollo key lives only in the proxy\'s <span class="kbd">.env</span> file — never in the browser or GitHub. Start it with <span class="kbd">node server/apollo-proxy.js</span> (see README).</div>' +
+        '<div class="field" style="margin-top:10px;"><label>Apollo proxy URL</label><input data-set="apolloProxyUrl" value="' + esc(s.apolloProxyUrl || "") + '" placeholder="http://localhost:8787"/></div>' +
+        '<label class="check" style="margin:4px 0 12px;"><input type="checkbox" data-set-bool="revealContacts"' + (s.revealContacts ? " checked" : "") + '> Reveal emails/phones (uses Apollo credits)</label>' +
+        '<label class="check" style="margin:-6px 0 12px;"><input type="checkbox" data-set-bool="revealPhone"' + (s.revealPhone ? " checked" : "") + '> Also reveal phone numbers — async; needs a public proxy (set WEBHOOK_BASE_URL)</label>' +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button>' +
+          '<button class="btn" data-action="test-proxy">Test proxy connection</button></div>' +
+      "</div>" +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📥 Gmail auto-status</h3>' +
+        '<div class="meta">Connect your Gmail (read-only) so the app can set 🟡 when you\'ve emailed a buyer and 🟢 when they reply. Requires Google OAuth credentials in the proxy\'s <span class="kbd">.env</span> (see README).</div>' +
+        '<div id="gmail-status" class="meta" style="margin-top:10px;">Checking connection…</div>' +
+        '<div class="btn-row" style="margin-top:10px;">' +
+          '<button class="btn primary" data-action="connect-gmail">Connect Gmail</button>' +
+          '<button class="btn" data-action="sync-gmail">📥 Sync now</button>' +
+        "</div></div>" +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>💱 Live prices</h3>' +
+        '<div class="meta">Prices show on the bar at the top of every page and feed into each email. ' +
+        'Pick where they come from — for the hosted site use <strong>Metals-API (direct)</strong> with a free key, ' +
+        'since the local proxy isn\'t reachable from https.</div>' +
+        '<div class="meta" style="margin-top:8px;">Current: <strong>' + esc(Store.prices().source) + "</strong> · " + esc(Prices.ageText(Store.prices().updatedAt)) + (App.priceMsg ? ' · <span style="color:var(--yellow)">' + esc(App.priceMsg) + "</span>" : "") + "</div>" +
+        '<div class="field" style="margin-top:10px;"><label>Price source</label><select data-set="priceSource">' +
+          opt("free", "Free web feed — no key, no setup (Gold/Copper/Aluminium)", s.priceSource) +
+          opt("metalsapi", "Metals-API (direct, needs key) — adds Zinc/Lead/Nickel", s.priceSource) +
+          opt("custom", "Custom URL (any CORS JSON feed)", s.priceSource) +
+          opt("proxy", "Local proxy /api/prices (needs the Node proxy running)", s.priceSource) +
+          opt("manual", "Manual only (no auto-fetch)", s.priceSource) +
+        "</select></div>" +
+        '<div class="meta" style="margin:-2px 0 8px;">Free feed pulls Gold, Copper &amp; Aluminium from public web data (no key). LME Zinc/Lead/Nickel &amp; premiums aren\'t free anywhere reliable — enter those via <strong>Edit</strong>.</div>' +
+        '<div class="field"><label>Metals-API key (for the direct source — free at metals-api.com)</label><input data-set="priceApiKey" value="' + esc(s.priceApiKey || "") + '" placeholder="your access_key"/></div>' +
+        '<div class="field"><label>Custom price URL (for the Custom source)</label><input data-set="priceCustomUrl" value="' + esc(s.priceCustomUrl || "") + '" placeholder="https://…/prices (returns normalized JSON)"/></div>' +
+        '<div class="field-2">' +
+          '<div class="field"><label>Calibrate: unit</label><select data-set="priceUnit">' +
+            opt("tonne", "per tonne", s.priceUnit) + opt("lb", "per lb (×2204.62)", s.priceUnit) + opt("oz", "per oz", s.priceUnit) +
+          "</select></div>" +
+          '<div class="field"><label>Calibrate: multiplier (if numbers look off)</label><input data-set="priceMult" value="' + esc(s.priceMult != null ? s.priceMult : 1) + '" placeholder="1"/></div>' +
+        "</div>" +
+        '<label class="check" style="margin:4px 0 12px;"><input type="checkbox" data-set-bool="priceInvert"' + (s.priceInvert !== false ? " checked" : "") + '> Invert rate (1/rate) — keep on for Metals-API</label>' +
+        '<label class="check" style="margin:0 0 12px;"><input type="checkbox" data-set-bool="autoScanPrices"' + (s.autoScanPrices !== false ? " checked" : "") + '> Auto-scan prices daily on load</label>' +
+        '<div class="field"><label>Live auto-refresh every (seconds, 0 = off — mind your API quota)</label><input data-set="priceLiveSeconds" value="' + esc(s.priceLiveSeconds != null ? s.priceLiveSeconds : 60) + '" placeholder="60"/></div>' +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button>' +
+          '<button class="btn" data-action="refresh-prices">↻ Fetch prices now</button></div>' +
+      "</div>" +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>Data</h3>' +
+        '<div class="meta">Back up or move your buyer list between devices.</div>' +
+        '<div class="btn-row" style="margin-top:10px;">' +
+          '<button class="btn" data-action="import">⇪ Import CSV / JSON</button>' +
+          '<button class="btn" data-action="export">⇩ Export backup (JSON)</button>' +
+          '<button class="btn danger" data-action="reset">Reset all data</button>' +
+        "</div></div>" +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📊 Offer margins</h3>' +
+        '<div class="meta">Your margin % over the live metal price, used by the offer generator. Use negative values for scrap discounts.</div>' +
+        '<div class="margins">' + App.PRODUCTS.map(function (pp) {
+          var v = (s.margins && s.margins[pp.id] != null) ? s.margins[pp.id] : "";
+          return '<label class="mg"><span>' + esc(pp.name) + '</span><input type="number" step="0.1" data-margin="' + pp.id + '" value="' + esc(v) + '" placeholder="0"/></label>';
+        }).join("") + "</div>" +
+        '<div class="btn-row" style="margin-top:10px;"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>✉️ Email templates</h3>' +
+        '<div class="meta">Used by the Send email button. Placeholders: <span class="kbd">{{contact}}</span> <span class="kbd">{{company}}</span> <span class="kbd">{{products}}</span> <span class="kbd">{{prices}}</span> <span class="kbd">{{me}}</span> <span class="kbd">{{myCompany}}</span>.</div>' +
+        '<div class="field" style="margin-top:10px;"><label>Default template</label><select data-set="defaultTemplateId"><option value="">Built-in default</option>' +
+          s.templates.map(function (t) { return '<option value="' + t.id + '"' + (s.defaultTemplateId === t.id ? " selected" : "") + ">" + esc(t.name) + "</option>"; }).join("") + "</select></div>" +
+        '<div class="tpl-list">' + (s.templates.length ? s.templates.map(function (t) {
+          return '<div class="tpl"><span>' + esc(t.name) + '</span><span class="p-actions"><button class="btn sm" data-action="edit-template" data-id="' + t.id + '">✎ Edit</button><button class="btn sm danger" data-action="del-template" data-id="' + t.id + '">🗑</button></span></div>';
+        }).join("") : '<div class="status-text">No templates yet — the built-in pitch is used.</div>') + "</div>" +
+        '<div class="btn-row" style="margin-top:10px;"><button class="btn" data-action="add-template">+ Add template</button><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👥 Team sync (shared data)</h3>' +
+        '<div class="meta">Share buyers, statuses and prices with teammates via the proxy. Everyone points at the same proxy URL and turns this on. Last-write-wins — click <strong>Pull</strong> to grab the latest before a big edit. Protect it with a token (proxy <span class="kbd">DATA_AUTH_TOKEN</span>).</div>' +
+        '<label class="check" style="margin:12px 0;"><input type="checkbox" data-set-bool="teamSync"' + (s.teamSync ? " checked" : "") + '> Enable team sync</label>' +
+        '<div class="field"><label>Sync server URL (blank = use the Apollo proxy URL above)</label><input data-set="syncServerUrl" value="' + esc(s.syncServerUrl || "") + '" placeholder="http://localhost:8787"/></div>' +
+        '<div class="field"><label>Shared token (optional)</label><input data-set="syncToken" value="' + esc(s.syncToken || "") + '" placeholder="matches proxy DATA_AUTH_TOKEN"/></div>' +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button>' +
+          '<button class="btn" data-action="team-pull">⬇ Pull from team</button>' +
+          '<button class="btn" data-action="team-push">⬆ Push to team</button></div>' +
+      "</div>";
+  }
+
+  /* =========================================================
+     MODALS
+     ========================================================= */
+  function openModal(title, bodyHtml, footerHtml) {
+    $("modal-root").innerHTML =
+      '<div class="modal-bg" data-action="modal-bg"><div class="modal">' +
+        "<header><h3>" + esc(title) + '</h3><button class="x" data-action="close-modal">×</button></header>' +
+        '<div class="body">' + bodyHtml + "</div>" +
+        (footerHtml ? "<footer>" + footerHtml + "</footer>" : "") +
+      "</div></div>";
+  }
+  function closeModal() { $("modal-root").innerHTML = ""; }
+  App.closeModal = closeModal;
+
+  function companyForm(c) {
+    c = c || {};
+    var isEdit = !!c.id;
+    var countryOpts = App.allCountries().map(function (x) {
+      return '<option value="' + x.code + '"' + (c.country === x.code ? " selected" : "") + ">" + x.flag + " " + esc(x.name) + "</option>";
+    }).join("");
+    var checks = App.PRODUCTS.map(function (p) {
+      var on = (c.materials || []).indexOf(p.id) !== -1;
+      var m = metal(p.metal);
+      return '<label class="check"><input type="checkbox" data-mat="' + p.id + '"' + (on ? " checked" : "") + ">" +
+        '<span class="swatch" style="width:8px;height:8px;border-radius:50%;background:' + m.color + ';display:inline-block"></span>' +
+        esc(p.name) + "</label>";
+    }).join("");
+
+    function fld(key, label, ph) {
+      return '<div class="field"><label>' + esc(label) + "</label>" +
+        '<input data-f="' + key + '" value="' + esc(c[key] || "") + '" placeholder="' + esc(ph || "") + '"/></div>';
+    }
+
+    var body =
+      fld("name", "Company name", "e.g. Aurubis AG") +
+      '<div class="field-2">' +
+        '<div class="field"><label>Country</label><select data-f="country">' + countryOpts + "</select></div>" +
+        fld("city", "City", "Hamburg") +
+      "</div>" +
+      '<div class="field-2">' + fld("contactName", "Contact person", "Procurement") + fld("email", "Email", "buyer@company.com") + "</div>" +
+      '<div class="field-2">' + fld("phone", "Phone", "+49 …") + fld("website", "Website", "company.com") + "</div>" +
+      '<div class="field"><label>Materials they buy from you</label><div class="checks">' + checks + "</div></div>" +
+      '<div class="field"><label>Notes</label><textarea data-f="notes" placeholder="Volumes, terms, history…">' + esc(c.notes || "") + "</textarea></div>" +
+      ((isEdit && c.activity && c.activity.length)
+        ? '<div class="field"><label>Activity timeline</label><div class="timeline">' +
+          c.activity.slice(0, 15).map(function (a) {
+            return '<div class="tl"><span class="tl-date">' + esc(new Date(a.ts).toLocaleString()) + "</span> " + esc(a.text) + "</div>";
+          }).join("") + "</div></div>"
+        : "");
+
+    var footer =
+      '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-company" data-id="' + (c.id || "") + '">' + (isEdit ? "Save changes" : "Add buyer") + "</button>";
+
+    openModal(isEdit ? "Edit buyer" : "Add buyer", body, footer);
+  }
+
+  function countryForm() {
+    var body =
+      '<div class="meta" style="margin-bottom:12px;">Add a market that isn\'t in the EU list (e.g. UK, Turkey, USA, UAE). It appears under <strong>My countries</strong> and in the buyer form.</div>' +
+      '<div class="field-2">' +
+        '<div class="field"><label>Country name</label><input data-cf="name" placeholder="e.g. Türkiye"/></div>' +
+        '<div class="field"><label>Flag emoji (optional)</label><input data-cf="flag" placeholder="🇹🇷" maxlength="4"/></div>' +
+      "</div>";
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-country">Add country</button>';
+    openModal("Add a country", body, footer);
+  }
+
+  function templateForm(t) {
+    t = t || {};
+    var body =
+      '<div class="field"><label>Template name</label><input data-tf="name" value="' + esc(t.name || "") + '" placeholder="Intro / Follow-up / Price alert"/></div>' +
+      '<div class="field"><label>Subject</label><input data-tf="subject" value="' + esc(t.subject || "") + '" placeholder="{{myCompany}} — {{products}}"/></div>' +
+      '<div class="field"><label>Body</label><textarea data-tf="body" style="min-height:200px" placeholder="Dear {{contact}}, …">' + esc(t.body || "") + "</textarea></div>" +
+      '<div class="meta">Placeholders: <span class="kbd">{{contact}}</span> <span class="kbd">{{company}}</span> <span class="kbd">{{products}}</span> <span class="kbd">{{prices}}</span> <span class="kbd">{{me}}</span> <span class="kbd">{{myCompany}}</span></div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-template" data-id="' + (t.id || "") + '">Save template</button>';
+    openModal(t.id ? "Edit template" : "Add template", body, footer);
+  }
+
+  /* ---- Offer / quote generator ---- */
+  function productBaseUSD(p) {
+    var pr = Store.prices();
+    if (!p) return null;
+    if (p.metal === "stainless") return pr.rows.nickel && pr.rows.nickel.value;
+    if (p.metal === "brass") return Prices.brassIndicative(pr);
+    if (p.metal === "iron") return null;
+    return pr.rows[p.metal] && pr.rows[p.metal].value;
+  }
+  function productOfferUnitUSD(p) {
+    var base = productBaseUSD(p);
+    if (base == null) return null;
+    var marginPct = Number((Store.settings().margins || {})[p.id] || 0);
+    var unit = base * (1 + marginPct / 100);
+    if (p.metal === "aluminium") {
+      var prem = Store.prices().rows.aluminium && Store.prices().rows.aluminium.premium;
+      if (prem) unit += Number(prem);
+    }
+    return Math.round(unit);
+  }
+
+  function offerForm(c) {
+    var mats = (c.materials || []).map(function (id) { return App.productById(id); }).filter(Boolean);
+    var rowsHtml = mats.length ? mats.map(function (p) {
+      var unit = productOfferUnitUSD(p);
+      return '<tr data-pid="' + p.id + '">' +
+        "<td>" + esc(p.name) + "</td>" +
+        '<td><input type="number" class="q" min="0" value="25" data-up="' + (unit == null ? "" : unit) + '" oninput="App.recalcOffer()" style="width:90px"/></td>' +
+        '<td class="up">' + (unit == null ? "—" : Prices.money(unit)) + "</td>" +
+        '<td class="lt">' + (unit == null ? "—" : Prices.money(unit * 25)) + "</td>" +
+        "</tr>";
+    }).join("") : '<tr><td colspan="4" class="status-text">No materials assigned — add some via Edit, then make an offer.</td></tr>';
+
+    var incoOpts = ["CIF", "FOB", "CFR", "EXW", "DAP"].map(function (i) { return '<option value="' + i + '">' + i + "</option>"; }).join("");
+    var body =
+      '<div class="meta" style="margin-bottom:8px;">Prices = live metal price + your margin (set margins in Settings). Edit qty; review, then print or email. Currency: <strong>' + (Store.settings().displayCurrency || "USD") + "</strong>.</div>" +
+      '<table class="sheet offer"><thead><tr><th>Product</th><th>Qty (MT)</th><th>Unit</th><th>Line total</th></tr></thead><tbody>' + rowsHtml + "</tbody>" +
+      '<tfoot><tr><td colspan="3" style="text-align:right;font-weight:700">Total</td><td id="offer-grand" style="font-weight:700"></td></tr></tfoot></table>' +
+      '<div class="field-2" style="margin-top:12px;">' +
+        '<div class="field"><label>Incoterm</label><select id="offer-inco">' + incoOpts + "</select></div>" +
+        '<div class="field"><label>Delivery port</label><input id="offer-port" placeholder="e.g. Rotterdam"/></div>' +
+      "</div>" +
+      '<div class="field-2">' +
+        '<div class="field"><label>Validity</label><input id="offer-valid" value="7 days" /></div>' +
+        '<div class="field"><label>Payment</label><input id="offer-pay" value="TT / LC at sight" /></div>' +
+      "</div>" +
+      '<div class="field"><label>Notes</label><input id="offer-notes" placeholder="Inspection: SGS; packing: …"/></div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn" data-action="print-offer" data-id="' + c.id + '">🖨 Print / PDF</button>' +
+      '<button class="btn primary" data-action="email-offer" data-id="' + c.id + '">✉️ Email offer</button>';
+    openModal("💰 Offer — " + (c.name || "buyer"), body, footer);
+    setTimeout(App.recalcOffer, 0);
+  }
+
+  App.recalcOffer = function () {
+    var modal = document.querySelector(".modal");
+    if (!modal) return;
+    var grandUSD = 0;
+    modal.querySelectorAll("tbody tr[data-pid]").forEach(function (tr) {
+      var inp = tr.querySelector(".q"); if (!inp) return;
+      var unit = Number(inp.getAttribute("data-up"));
+      var qty = Number(inp.value) || 0;
+      if (!isNaN(unit) && inp.getAttribute("data-up") !== "") {
+        tr.querySelector(".lt").textContent = Prices.money(unit * qty);
+        grandUSD += unit * qty;
+      }
+    });
+    var g = modal.querySelector("#offer-grand"); if (g) g.textContent = Prices.money(grandUSD);
+  };
+
+  function readOffer(modal) {
+    var lines = [];
+    modal.querySelectorAll("tbody tr[data-pid]").forEach(function (tr) {
+      var inp = tr.querySelector(".q"); if (!inp || inp.getAttribute("data-up") === "") return;
+      var p = App.productById(tr.getAttribute("data-pid"));
+      var unit = Number(inp.getAttribute("data-up")); var qty = Number(inp.value) || 0;
+      lines.push({ name: p ? p.name : "", qty: qty, unit: unit, total: unit * qty });
+    });
+    return {
+      lines: lines,
+      inco: (modal.querySelector("#offer-inco") || {}).value || "",
+      port: (modal.querySelector("#offer-port") || {}).value || "",
+      validity: (modal.querySelector("#offer-valid") || {}).value || "",
+      payment: (modal.querySelector("#offer-pay") || {}).value || "",
+      notes: (modal.querySelector("#offer-notes") || {}).value || ""
+    };
+  }
+
+  function offerLinesText(o) {
+    var sym = Prices.currencySymbol();
+    var rows = o.lines.map(function (l) {
+      return "  • " + l.name + " — " + l.qty + " MT @ " + sym + Prices.fmt(Prices.toDisplay(l.unit)) + "/MT = " + sym + Prices.fmt(Prices.toDisplay(l.total));
+    }).join("\n");
+    var grand = o.lines.reduce(function (a, l) { return a + l.total; }, 0);
+    return { rows: rows, grand: sym + Prices.fmt(Prices.toDisplay(grand)) };
+  }
+
+  function pricesForm() {
+    var p = Store.prices();
+    function row(label, key, hasPrem) {
+      var r = p.rows[key] || {};
+      var prem = hasPrem
+        ? '<div class="field"><label>EU duty-paid premium (USD/MT)</label><input type="number" data-price-prem="' + key + '" value="' + (r.premium == null ? "" : r.premium) + '" placeholder="e.g. 290"/></div>'
+        : "";
+      return '<div class="field-2"><div class="field"><label>' + esc(label) + ' (USD/MT)</label>' +
+        '<input type="number" data-price="' + key + '" value="' + (r.value == null ? "" : r.value) + '" placeholder="e.g. 9000"/></div>' + prem + "</div>";
+    }
+    var body =
+      '<div class="notice">Enter today\'s LME settlement prices. They appear on the price bar and in every email draft. ' +
+      'For the aluminium EU premium see <a href="' + App.PREMIUM_SOURCE_URL + '" target="_blank" rel="noopener">the LME premium page</a>.</div>' +
+      App.PRICE_ROWS.map(function (r) { return row(r.label, r.key, r.hasPremium); }).join("") +
+      '<div class="field"><label>Source label</label><input data-price-src value="' + esc(p.source) + '" placeholder="Manual / LME / SMM"/></div>';
+    var footer =
+      '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-prices">Save prices</button>';
+    openModal("Update LME prices", body, footer);
+  }
+
+  function importForm() {
+    var body =
+      '<div class="notice">📋 New here? <strong>Load the EU starter list</strong> — ' + (App.EU_SEED ? App.EU_SEED.length : 0) +
+      ' real EU non-ferrous producers & recyclers as research leads, then use <strong>👥 Find buyers</strong> to pull their contacts.' +
+      '<div style="margin-top:8px;"><button class="btn primary sm" data-action="load-eu-seed">Load EU starter list</button></div></div>' +
+      '<div class="notice">Or paste <strong>CSV</strong> (with a header row) or a previously exported <strong>JSON</strong> backup.</div>' +
+      '<div class="meta" style="margin-bottom:8px;">CSV columns recognised: <span class="kbd">name</span> <span class="kbd">country</span> <span class="kbd">city</span> ' +
+      '<span class="kbd">contact</span> <span class="kbd">email</span> <span class="kbd">phone</span> <span class="kbd">website</span> ' +
+      '<span class="kbd">materials</span> <span class="kbd">notes</span>. ' +
+      'For materials use product names or ids separated by <span class="kbd">;</span>. This is exactly how an Apollo.io export can be mapped.</div>' +
+      '<div class="field"><textarea id="import-text" style="min-height:200px;font-family:monospace;font-size:12px;" placeholder="name,country,city,contact,email,phone,website,materials\nAurubis AG,DE,Hamburg,Procurement,buyer@example.com,+49...,aurubis.com,copper-cathode;cu-scrap-millberry"></textarea></div>';
+    var footer =
+      '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="do-import">Import</button>';
+    openModal("Import buyers", body, footer);
+  }
+
+  function openPeoplePicker(company, res) {
+    var people = res.people || [];
+    var mockNote = res.mock
+      ? '<div class="notice warn">Proxy is in <strong>MOCK mode</strong> (no API key set) — these are sample contacts. Set APOLLO_API_KEY in the proxy\'s .env for real data.</div>'
+      : "";
+    var revealNote = (!App.Store.settings().revealContacts && people.some(function (p) { return p.locked; }))
+      ? '<div class="notice">Some emails are 🔒 locked. Enable “Reveal emails/phones” in Settings to unlock them (uses Apollo credits).</div>'
+      : "";
+
+    var rows = people.length ? people.map(function (p) {
+      var enc = encodeURIComponent(JSON.stringify(p));
+      var contact = p.email ? ('✉️ ' + esc(p.email)) : (p.locked ? "🔒 email locked" : "no email");
+      return '<label class="pick"><input type="checkbox" data-person="' + enc + '" ' + (p.email ? "checked" : "") + ">" +
+        '<div><div class="pick-name">' + esc(p.name || "—") + ' <small>' + esc(p.seniority || "") + "</small></div>" +
+        '<div class="pick-title">' + esc(p.title || "") + "</div>" +
+        '<div class="pick-contact">' + contact + (p.linkedin ? ' · <a href="' + esc(p.linkedin) + '" target="_blank" rel="noopener">LinkedIn</a>' : "") + "</div></div></label>";
+    }).join("") : '<div class="empty"><div class="big">🔍</div><p>No matching procurement/buyer contacts found for this domain.</p></div>';
+
+    var body = mockNote + revealNote +
+      '<div class="meta" style="margin-bottom:10px;">Found ' + people.length + " contact(s) at <strong>" + esc(company.name) + "</strong> matching buyer / procurement / trader roles.</div>" +
+      '<div class="pick-list">' + rows + "</div>";
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      (people.length ? '<button class="btn primary" data-action="save-selected-people" data-id="' + company.id + '">Add selected</button>' : "");
+    openModal("👥 Buyers at " + company.name, body, footer);
+  }
+
+  function openCompanyPicker(countryCode, res) {
+    var country = App.countryByCode(countryCode);
+    var companies = res.companies || [];
+    var mockNote = res.mock
+      ? '<div class="notice warn">Proxy is in <strong>MOCK mode</strong> — these are samples. Set APOLLO_API_KEY for real company discovery.</div>'
+      : "";
+    var rows = companies.length ? companies.map(function (c) {
+      var enc = encodeURIComponent(JSON.stringify(c));
+      return '<label class="pick"><input type="checkbox" data-company="' + enc + '" ' + (c.domain ? "checked" : "") + ">" +
+        '<div><div class="pick-name">' + esc(c.name || "—") + "</div>" +
+        '<div class="pick-contact">' + (c.domain ? "🌐 " + esc(c.domain) : "no website") + (c.city ? " · " + esc(c.city) : "") + "</div></div></label>";
+    }).join("") : '<div class="empty"><div class="big">🔍</div><p>No companies returned. Try again or adjust Apollo filters.</p></div>';
+
+    var body = mockNote +
+      '<div class="meta" style="margin-bottom:10px;">Found ' + companies.length + " real companies in <strong>" + esc(country ? country.name : countryCode) +
+      "</strong>. Add the ones you want, then run <strong>Find buyers (all)</strong> to pull verified emails.</div>" +
+      '<div class="pick-list">' + rows + "</div>";
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      (companies.length ? '<button class="btn primary" data-action="save-discovered" data-country="' + countryCode + '">Add selected</button>' : "");
+    openModal("🔎 Discover companies — " + (country ? country.name : countryCode), body, footer);
+  }
+
+  /* Bulk: find buyers for every company (optionally in one country) with a
+     polite delay between Apollo calls so we don't hammer rate limits. */
+  function bulkFindBuyers(countryCode) {
+    var list = (countryCode ? Store.companiesByCountry(countryCode) : Store.companies())
+      .filter(function (c) { return (c.website || "").trim(); });
+    if (!list.length) {
+      toast("No companies with a website here. Add websites first so Apollo can match them.");
+      return;
+    }
+    var settings = Store.settings();
+    var warn = settings.revealContacts
+      ? "\n\nHeads up: 'Reveal emails/phones' is ON, so this spends Apollo credits for each company."
+      : "";
+    if (!confirm("Find buyer/procurement contacts for " + list.length + " company(ies) via Apollo?" + warn)) return;
+
+    var i = 0, totalPeople = 0, failed = 0;
+    var DELAY = 1300; // ms between calls — rate-limit friendly
+
+    function step() {
+      if (i >= list.length) {
+        render();
+        toast("Done — added " + totalPeople + " contact(s) across " + list.length +
+          " company(ies)" + (failed ? " · " + failed + " failed (no match / error)." : "."));
+        return;
+      }
+      var c = list[i];
+      toast("Apollo " + (i + 1) + "/" + list.length + ": " + (c.name || "company") + "…");
+      App.Apollo.findBuyers(c).then(function (res) {
+        totalPeople += Store.addPeople(c.id, res.people || []);
+      }).catch(function () {
+        failed++;
+      }).then(function () {
+        i++;
+        setTimeout(step, DELAY);
+      });
+    }
+    step();
+  }
+
+  /* Collect every email address tied to a company (primary + discovered people). */
+  function companyEmails(c) {
+    var set = {};
+    if (c.email) set[c.email.toLowerCase()] = 1;
+    (c.people || []).forEach(function (p) { if (p.email) set[p.email.toLowerCase()] = 1; });
+    return Object.keys(set);
+  }
+
+  /* Sync traffic-light status from Gmail: reply -> green, contacted -> yellow. */
+  function syncGmail() {
+    var companies = Store.companies();
+    var emails = [];
+    companies.forEach(function (c) { emails = emails.concat(companyEmails(c)); });
+    emails = emails.filter(function (e, i) { return emails.indexOf(e) === i; });
+    if (!emails.length) { toast("No buyer emails yet — add or find contacts first."); return; }
+
+    toast("Syncing with Gmail…");
+    App.Gmail.check(emails).then(function (results) {
+      // detect "not connected" responses
+      var notConnected = emails.every(function (e) {
+        var r = results[e]; return r && r.error && /not connected|not configured/i.test(r.error);
+      });
+      if (notConnected) {
+        toast("Gmail isn't connected yet — open Settings → Connect Gmail.");
+        return;
+      }
+      var greens = 0, yellows = 0;
+      companies.forEach(function (c) {
+        // Update each discovered contact individually first.
+        (c.people || []).forEach(function (p, idx) {
+          if (!p.email) return;
+          var r = results[p.email.toLowerCase()];
+          if (!r) return;
+          if (r.replied && p.status !== "green") { Store.setPersonStatus(c.id, idx, "green", { lastReplyAt: Date.now() }); }
+          else if (r.contacted && (p.status || "red") === "red") { Store.setPersonStatus(c.id, idx, "yellow", { lastEmailAt: p.lastEmailAt || Date.now() }); }
+        });
+        // Then the company headline (its own primary email, or rolled up from people).
+        var mine = companyEmails(c);
+        var replied = mine.some(function (e) { return results[e] && results[e].replied; });
+        var contacted = mine.some(function (e) { return results[e] && results[e].contacted; });
+        if (replied) {
+          if (c.status !== "green") { Store.setStatus(c.id, "green", { lastReplyAt: Date.now() }); greens++; }
+        } else if (contacted && c.status === "red") {
+          Store.setStatus(c.id, "yellow", { lastEmailAt: c.lastEmailAt || Date.now() }); yellows++;
+        }
+      });
+      render();
+      toast("Gmail synced — " + greens + " new reply(ies) 🟢, " + yellows + " marked awaiting 🟡.");
+    }).catch(function (err) { toast(err.message); });
+  }
+
+  /* Settings: show the current Gmail connection state. */
+  function refreshGmailStatus() {
+    var el = document.getElementById("gmail-status");
+    if (!el) return;
+    App.Gmail.status().then(function (s) {
+      if (s.unreachable) el.innerHTML = "⚪ Proxy not reachable — start it to use Gmail sync.";
+      else if (!s.configured) el.innerHTML = "⚪ Not configured — add Google OAuth credentials to the proxy's .env (see README).";
+      else if (s.connected) el.innerHTML = "🟢 Connected" + (s.email ? " as <strong>" + esc(s.email) + "</strong>" : "") + (s.mock ? " (mock)" : "");
+      else el.innerHTML = "🟡 Configured but not connected — click “Connect Gmail”.";
+    });
+  }
+
+  /* =========================================================
+     CSV PARSER (simple, quote-aware)
+     ========================================================= */
+  function parseCSV(text) {
+    var rows = [], row = [], cur = "", q = false, i, ch;
+    for (i = 0; i < text.length; i++) {
+      ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') { q = false; }
+        else cur += ch;
+      } else {
+        if (ch === '"') q = true;
+        else if (ch === ",") { row.push(cur); cur = ""; }
+        else if (ch === "\n" || ch === "\r") {
+          if (ch === "\r" && text[i + 1] === "\n") i++;
+          row.push(cur); rows.push(row); row = []; cur = "";
+        } else cur += ch;
+      }
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+    rows = rows.filter(function (r) { return r.some(function (c) { return c.trim() !== ""; }); });
+    if (!rows.length) return [];
+    var headers = rows.shift().map(function (h) { return h.trim().toLowerCase(); });
+    return rows.map(function (r) {
+      var o = {};
+      headers.forEach(function (h, idx) { o[h] = (r[idx] || "").trim(); });
+      return o;
+    });
+  }
+
+  /* =========================================================
+     EVENT HANDLING (delegated)
+     ========================================================= */
+  function readForm(scope) {
+    var data = {};
+    scope.querySelectorAll("[data-f]").forEach(function (el) { data[el.getAttribute("data-f")] = el.value.trim(); });
+    var mats = [];
+    scope.querySelectorAll("[data-mat]:checked").forEach(function (el) { mats.push(el.getAttribute("data-mat")); });
+    data.materials = mats;
+    return data;
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-nav]");
+    if (t) {
+      var nav = t.getAttribute("data-nav");
+      if (nav.indexOf("country:") === 0) { route = { view: "country", country: nav.split(":")[1] }; }
+      else { route = { view: nav, country: null }; }
+      query = ""; filterStatus = ""; filterMetal = "";
+      render();
+      return;
+    }
+
+    var a = e.target.closest("[data-action]");
+    if (!a) return;
+    var action = a.getAttribute("data-action");
+    var id = a.getAttribute("data-id");
+    var company = id ? Store.companyById(id) : null;
+
+    switch (action) {
+      case "modal-bg":
+        if (e.target === a) closeModal();
+        break;
+      case "close-modal": closeModal(); break;
+
+      case "add-company":
+        companyForm({ country: a.getAttribute("data-country") || (route.country || "DE") });
+        break;
+
+      case "add-country": countryForm(); break;
+      case "save-country": {
+        var cm = a.closest(".modal");
+        var nm = cm.querySelector("[data-cf=name]").value.trim();
+        var fl = cm.querySelector("[data-cf=flag]").value.trim();
+        if (!nm) { toast("Enter a country name."); break; }
+        var nc = Store.addCustomCountry(nm, fl);
+        closeModal();
+        route = { view: "country", country: nc.code };
+        render(); toast("Added " + nc.name + " — add buyers to it now.");
+        break;
+      }
+      case "remove-country": {
+        var rc = App.countryByCode(a.getAttribute("data-country"));
+        if (rc && confirm("Remove " + rc.name + " and its buyers from the app?")) {
+          Store.removeCustomCountry(rc.code);
+          route = { view: "dashboard", country: null };
+          render(); toast(rc.name + " removed.");
+        }
+        break;
+      }
+
+      case "sheet-add": Store.addSheetRow(); render(); break;
+      case "sheet-del": Store.deleteSheetRow(id); render(); break;
+      case "edit-company": companyForm(company); break;
+
+      case "save-company": {
+        var modal = a.closest(".modal");
+        var data = readForm(modal);
+        if (!data.name && !data.email) { toast("Add at least a name or email."); return; }
+        if (id) Store.updateCompany(id, data);
+        else Store.addCompany(data);
+        closeModal(); render(); toast(id ? "Buyer updated." : "Buyer added.");
+        break;
+      }
+
+      case "del-company":
+        if (confirm("Delete " + (company ? company.name : "this buyer") + "?")) {
+          Store.deleteCompany(id); render(); toast("Buyer deleted.");
+        }
+        break;
+
+      case "status": {
+        var st = a.getAttribute("data-status");
+        var extra = {};
+        if (st === "yellow") extra.lastEmailAt = company.lastEmailAt || Date.now();
+        if (st === "green") extra.lastReplyAt = Date.now();
+        Store.setStatus(id, st, extra);
+        Store.logActivity(id, "status", "Status set to " + st);
+        render();
+        break;
+      }
+
+      case "send-email": {
+        if (!company.email) { toast("Add an email address first (Edit)."); break; }
+        window.open(Email.composeUrl(company), "_blank");
+        Store.updateCompany(id, { lastEmailAt: Date.now(), lastEmailSubject: Email.buildDraft(company).subject });
+        if (company.status === "red") Store.setStatus(id, "yellow", {});
+        Store.logActivity(id, "email", "Email drafted to " + company.email);
+        render();
+        toast("Opened Gmail with a pre-written email. Review & send.");
+        break;
+      }
+
+      case "open-thread":
+        window.open(Email.threadUrl(company), "_blank");
+        break;
+
+      case "edit-prices": pricesForm(); break;
+      case "save-prices": {
+        var m2 = a.closest(".modal");
+        App.PRICE_ROWS.forEach(function (r) {
+          var v = m2.querySelector('[data-price="' + r.key + '"]');
+          var patch = { value: v && v.value !== "" ? Number(v.value) : null };
+          if (r.hasPremium) {
+            var pr = m2.querySelector('[data-price-prem="' + r.key + '"]');
+            patch.premium = pr && pr.value !== "" ? Number(pr.value) : null;
+          }
+          Store.setPriceRow(r.key, patch);
+        });
+        var src = m2.querySelector("[data-price-src]");
+        Store.updatePrices({ source: src && src.value ? src.value : "Manual entry" });
+        closeModal(); render(); toast("Prices updated.");
+        break;
+      }
+      case "clear-filters":
+        filterStatus = ""; filterMetal = ""; render();
+        break;
+
+      case "alert-filter":
+        filterMetal = a.getAttribute("data-metal") || "";
+        filterStatus = "";
+        route = { view: "companies", country: null };
+        render();
+        break;
+
+      case "make-offer": offerForm(company); break;
+
+      case "email-offer": {
+        var mo = a.closest(".modal");
+        var o = readOffer(mo);
+        if (!o.lines.length) { toast("No priced products to offer."); break; }
+        var s = Store.settings();
+        var lt = offerLinesText(o);
+        var greeting = company.contactName ? "Dear " + (company.contactName.split(/\s+/)[0]) + "," : "Dear Sir or Madam,";
+        var subject = s.companyName + " — offer for " + company.name;
+        var bodyTxt = greeting + "\n\nPlease find our offer below:\n\n" + lt.rows +
+          "\n\nTotal: " + lt.grand +
+          "\nTerms: " + o.inco + (o.port ? " " + o.port : "") + " · Validity: " + o.validity + " · Payment: " + o.payment +
+          (o.notes ? "\nNotes: " + o.notes : "") +
+          "\n\nPrices are formula-linked to the prevailing LME and confirmed at contract.\n\nBest regards,\n" +
+          s.senderName + (s.senderTitle ? "\n" + s.senderTitle : "") + "\n" + s.companyName + (s.phone ? "\nTel: " + s.phone : "");
+        var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(company.email || "") +
+          "&su=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(bodyTxt);
+        window.open(url, "_blank");
+        Store.updateCompany(id, { lastEmailAt: Date.now() });
+        if (company.status === "red") Store.setStatus(id, "yellow", {});
+        Store.logActivity(id, "offer", "Offer emailed (" + o.lines.length + " items)");
+        closeModal(); render(); toast("Opened Gmail with your offer.");
+        break;
+      }
+
+      case "print-offer": {
+        var pmo = a.closest(".modal");
+        var po = readOffer(pmo);
+        var ps = Store.settings();
+        var plt = offerLinesText(po);
+        var sym = Prices.currencySymbol();
+        var rowsHtml = po.lines.map(function (l) {
+          return "<tr><td>" + l.name + "</td><td style='text-align:right'>" + l.qty + " MT</td><td style='text-align:right'>" +
+            sym + Prices.fmt(Prices.toDisplay(l.unit)) + "/MT</td><td style='text-align:right'>" + sym + Prices.fmt(Prices.toDisplay(l.total)) + "</td></tr>";
+        }).join("");
+        var grand = po.lines.reduce(function (x, l) { return x + l.total; }, 0);
+        var w = window.open("", "_blank");
+        if (!w) { toast("Allow pop-ups to print the offer."); break; }
+        w.document.write(
+          "<html><head><title>Offer — " + (company.name || "") + "</title><style>" +
+          "body{font-family:Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{font-size:20px}" +
+          "table{width:100%;border-collapse:collapse;margin:16px 0}th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left}" +
+          ".tot{font-weight:bold;font-size:16px}.muted{color:#666;font-size:13px}</style></head><body>" +
+          "<h1>" + esc(ps.companyName || "Offer") + "</h1>" +
+          "<div class='muted'>" + esc(ps.senderName || "") + (ps.phone ? " · " + esc(ps.phone) : "") + (ps.senderEmail ? " · " + esc(ps.senderEmail) : "") + "</div>" +
+          "<p><strong>Offer to:</strong> " + esc(company.name || "") + "<br><strong>Date:</strong> " + new Date().toLocaleDateString() + "</p>" +
+          "<table><thead><tr><th>Product</th><th style='text-align:right'>Qty</th><th style='text-align:right'>Unit</th><th style='text-align:right'>Total</th></tr></thead><tbody>" +
+          rowsHtml + "</tbody></table>" +
+          "<p class='tot'>Total: " + sym + Prices.fmt(Prices.toDisplay(grand)) + "</p>" +
+          "<p class='muted'>Terms: " + esc(po.inco) + " " + esc(po.port) + " · Validity: " + esc(po.validity) + " · Payment: " + esc(po.payment) +
+          (po.notes ? "<br>Notes: " + esc(po.notes) : "") +
+          "<br>Prices are formula-linked to the prevailing LME and confirmed at contract.</p>" +
+          "</body></html>");
+        w.document.close(); w.focus(); setTimeout(function () { w.print(); }, 250);
+        Store.logActivity(id, "offer", "Offer printed (" + po.lines.length + " items)");
+        break;
+      }
+
+      case "toggle-currency": {        var cur = Store.settings().displayCurrency || "USD";
+        var next = cur === "USD" ? "EUR" : "USD";
+        Store.updateSettings({ displayCurrency: next });
+        renderPriceBar();
+        if (next === "EUR" && !Store.prices().fx) {
+          toast("Fetching EUR rate…");
+          Prices.fetchLive(true).then(function (d) { if (d) { Store.applyPriceFeed(d); renderPriceBar(); } }).catch(function () {});
+        }
+        break;
+      }
+
+      case "refresh-prices":
+        toast("Scanning live prices…");
+        Prices.fetchLive(true).then(function (d) {
+          App.priceMsg = "";
+          Store.applyPriceFeed(d);
+          render();
+          toast("Live prices loaded (" + (d.source || "feed") + ").");
+        }).catch(function (err) {
+          App.priceMsg = err.message; renderPriceBar();
+          toast(err.message);
+        });
+        break;
+
+      case "save-settings": {
+        var sc = a.closest(".content") || document;
+        var patch = {};
+        sc.querySelectorAll("[data-set]").forEach(function (el) { patch[el.getAttribute("data-set")] = el.value.trim(); });
+        sc.querySelectorAll("[data-set-bool]").forEach(function (el) { patch[el.getAttribute("data-set-bool")] = el.checked; });
+        var margins = Object.assign({}, Store.settings().margins);
+        sc.querySelectorAll("[data-margin]").forEach(function (el) {
+          var v = el.value.trim();
+          if (v === "") delete margins[el.getAttribute("data-margin")];
+          else margins[el.getAttribute("data-margin")] = Number(v);
+        });
+        patch.margins = margins;
+        Store.updateSettings(patch); toast("Settings saved.");
+        if (App.startLiveTicker) App.startLiveTicker();
+        break;
+      }
+
+      case "add-template": templateForm(); break;
+      case "edit-template": templateForm((Store.settings().templates || []).find(function (t) { return t.id === id; })); break;
+      case "del-template": {
+        var tpls = (Store.settings().templates || []).filter(function (t) { return t.id !== id; });
+        Store.updateSettings({ templates: tpls });
+        render(); toast("Template deleted.");
+        break;
+      }
+      case "save-template": {
+        var tm = a.closest(".modal");
+        var tdata = {
+          id: id || App.uid(),
+          name: (tm.querySelector("[data-tf=name]").value || "Untitled").trim(),
+          subject: tm.querySelector("[data-tf=subject]").value,
+          body: tm.querySelector("[data-tf=body]").value
+        };
+        var arr = (Store.settings().templates || []).slice();
+        var idx = arr.findIndex(function (t) { return t.id === tdata.id; });
+        if (idx >= 0) arr[idx] = tdata; else arr.push(tdata);
+        Store.updateSettings({ templates: arr });
+        closeModal(); render(); toast("Template saved.");
+        break;
+      }
+
+      case "test-proxy":
+        toast("Pinging proxy…");
+        App.Apollo.health().then(function (h) {
+          toast(h.mock ? "Proxy reachable — running in MOCK mode (no key)." : (h.hasKey ? "Proxy reachable — LIVE, key set ✓" : "Proxy reachable but no API key set."));
+        }).catch(function () { toast("Proxy not reachable at " + App.Apollo.proxyUrl() + ". Start it first."); });
+        break;
+
+      case "find-buyers": {
+        if (!company.website) { toast("Add this company's website first (Edit) so Apollo can match it."); break; }
+        a.textContent = "⏳ Searching…"; a.setAttribute("disabled", "1");
+        App.Apollo.findBuyers(company).then(function (res) {
+          openPeoplePicker(company, res);
+        }).catch(function (err) {
+          toast(err.message);
+        }).then(function () { render(); });
+        break;
+      }
+
+      case "save-selected-people": {
+        var mp = a.closest(".modal");
+        var chosen = [];
+        mp.querySelectorAll("[data-person]:checked").forEach(function (el) {
+          chosen.push(JSON.parse(decodeURIComponent(el.getAttribute("data-person"))));
+        });
+        if (!chosen.length) { toast("Select at least one person."); break; }
+        var n = Store.addPeople(id, chosen);
+        closeModal(); render(); toast(n + " contact(s) added.");
+        break;
+      }
+
+      case "person-email": {
+        var pidx = Number(a.getAttribute("data-idx"));
+        var person = (company.people || [])[pidx];
+        if (!person || !person.email) { toast("No email for this person."); break; }
+        window.open(Email.composeUrl(company, person), "_blank");
+        if ((person.status || "red") === "red") Store.setPersonStatus(id, pidx, "yellow", { lastEmailAt: Date.now() });
+        render(); toast("Opened Gmail to " + person.name + ".");
+        break;
+      }
+
+      case "person-status":
+        Store.setPersonStatus(id, Number(a.getAttribute("data-idx")), a.getAttribute("data-status"),
+          a.getAttribute("data-status") === "yellow" ? { lastEmailAt: Date.now() } :
+          a.getAttribute("data-status") === "green" ? { lastReplyAt: Date.now() } : {});
+        render();
+        break;
+
+      case "person-thread": {
+        var tp = (company.people || [])[Number(a.getAttribute("data-idx"))];
+        if (tp && tp.email) window.open(Email.threadUrl({ email: tp.email, name: tp.name }), "_blank");
+        break;
+      }
+
+      case "del-person":
+        Store.removePerson(id, Number(a.getAttribute("data-idx")));
+        render();
+        break;
+
+      case "refresh-phones": {
+        toast("Checking for phone numbers…");
+        App.Apollo.getPhones(company).then(function (map) {
+          var n = Store.mergePhones(id, map);
+          render();
+          toast(n ? (n + " phone number(s) added.") : "No new phone numbers yet (they arrive a bit after reveal).");
+        });
+        break;
+      }
+
+      case "bulk-find": {
+        bulkFindBuyers(a.getAttribute("data-country") || null);
+        break;
+      }
+
+      case "discover-companies": {
+        var cc = a.getAttribute("data-country");
+        var country = App.countryByCode(cc);
+        a.textContent = "⏳ Searching…"; a.setAttribute("disabled", "1");
+        App.Apollo.findCompanies(country ? country.name : cc).then(function (res) {
+          openCompanyPicker(cc, res);
+        }).catch(function (err) { toast(err.message); }).then(function () { render(); });
+        break;
+      }
+
+      case "save-discovered": {
+        var dm = a.closest(".modal");
+        var dcc = a.getAttribute("data-country");
+        var chosen = [];
+        dm.querySelectorAll("[data-company]:checked").forEach(function (el) {
+          chosen.push(JSON.parse(decodeURIComponent(el.getAttribute("data-company"))));
+        });
+        if (!chosen.length) { toast("Select at least one company."); break; }
+        var seed = chosen.map(function (x) {
+          return { name: x.name, country: dcc, city: x.city || "", website: x.domain || "", materials: [], notes: "Discovered via Apollo — run Find buyers for contacts." };
+        });
+        var n = Store.importSeed(seed);
+        closeModal(); render();
+        toast(n + " companies added — now run “Find buyers (all)” to get emails.");
+        break;
+      }
+
+      case "connect-gmail":
+        window.open(App.Gmail.connectUrl(), "_blank");
+        toast("Connect Gmail in the new tab, then click “Sync now”.");
+        break;
+
+      case "sync-gmail":
+        syncGmail();
+        break;
+
+      case "team-pull":
+        if (!App.Sync.enabled()) { toast("Enable team sync first (and Save)."); break; }
+        toast("Pulling team data…");
+        App.Sync.pull().then(function (j) {
+          if (j && j.state && Store.applyRemote(j)) { render(); toast("Pulled latest team data."); }
+          else toast("No shared data on the server yet — push first.");
+        }).catch(function (e) { toast(e.message); });
+        break;
+
+      case "team-push":
+        if (!App.Sync.enabled()) { toast("Enable team sync first (and Save)."); break; }
+        toast("Pushing to team…");
+        App.Sync.push().then(function (j) { toast("Pushed (rev " + (j.rev || "?") + ")."); })
+          .catch(function (e) { toast(e.message); });
+        break;
+
+      case "import": importForm(); break;
+      case "load-eu-seed": {
+        var added = Store.importSeed(App.EU_SEED || []);
+        closeModal(); render();
+        toast(added ? (added + " starter companies loaded — now run “Find buyers”.") : "Starter list already loaded.");
+        break;
+      }
+      case "do-import": {
+        var txt = $("import-text").value.trim();
+        if (!txt) { toast("Paste some data first."); break; }
+        try {
+          if (txt[0] === "{") { Store.importJSON(txt); toast("Backup restored."); }
+          else {
+            var rows = parseCSV(txt);
+            var n = Store.importCompanyRows(rows);
+            toast(n + " buyer(s) imported.");
+          }
+          closeModal(); render();
+        } catch (err) { toast("Import failed: " + err.message); }
+        break;
+      }
+      case "export": {
+        var blob = new Blob([Store.exportJSON()], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var aEl = document.createElement("a");
+        aEl.href = url; aEl.download = "metals-crm-backup.json"; aEl.click();
+        URL.revokeObjectURL(url);
+        toast("Backup downloaded.");
+        break;
+      }
+      case "reset":
+        if (confirm("This erases ALL buyers, prices and settings. Continue?")) {
+          Store.resetAll(); render(); toast("Everything reset.");
+        }
+        break;
+    }
+  });
+
+  App.onSheetEdit = function (id, field, value) {
+    var patch = {}; patch[field] = value;
+    App.Store.updateSheetRow(id, patch);
+  };
+
+  App.onFilter = function (kind, value) {
+    if (kind === "status") filterStatus = value; else if (kind === "metal") filterMetal = value;
+    var c = $("content");
+    if (route.view === "companies" || route.view === "country") c.innerHTML = viewCompanies(route.country);
+  };
+
+  App.onSearch = function (v) { query = v; var c = $("content");
+    // re-render only the cards area to keep input focus
+    if (route.view === "companies" || route.view === "country") {
+      c.innerHTML = viewCompanies(route.country);
+      var s = c.querySelector(".search");
+      if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+    }
+  };
+
+  /* Auto-scan live prices ~once/day on load (if a source is configured).
+     Surfaces the reason in the price bar if it can't (instead of silent). */
+  function autoScanPrices() {
+    if (Store.settings().autoScanPrices === false) return;
+    if (Store.settings().priceSource === "manual") return;
+    var p = Store.prices();
+    var age = Date.now() - (p.updatedAt || 0);
+    if (p.updatedAt && age < 12 * 3600 * 1000) return; // already fresh today
+    App.priceMsg = "scanning…"; renderPriceBar();
+    Prices.fetchLive().then(function (d) {
+      if (d && (d.copper != null || d.aluminium != null || d.zinc != null)) {
+        App.priceMsg = ""; Store.applyPriceFeed(d); renderPriceBar();
+      } else {
+        App.priceMsg = "Live feed returned no prices."; renderPriceBar();
+      }
+    }).catch(function (err) {
+      App.priceMsg = err.message; renderPriceBar();
+    });
+  }
+
+  /* Live ticker: re-fetch prices on an interval so the board updates itself. */
+  function startLiveTicker() {
+    if (App._liveTimer) clearInterval(App._liveTimer);
+    var s = Store.settings();
+    var secs = Number(s.priceLiveSeconds) || 0;
+    if (secs <= 0 || s.priceSource === "manual") return;
+    App._liveTimer = setInterval(function () {
+      Prices.fetchLive(true).then(function (d) {
+        if (d) { App.priceMsg = ""; Store.applyPriceFeed(d); renderPriceBar(); }
+      }).catch(function (err) { App.priceMsg = err.message; renderPriceBar(); });
+    }, Math.max(15, secs) * 1000);
+  }
+  App.startLiveTicker = startLiveTicker;
+
+  /* boot */
+  function boot() {
+    render();
+    setTimeout(autoScanPrices, 700);
+    if (App.Sync) App.Sync.init(function () { render(); toast("Pulled latest team data."); });
+    startLiveTicker();
+  }
+  document.addEventListener("DOMContentLoaded", boot);
+  if (document.readyState !== "loading") boot();
+
+})(window.App);
+
+</script>
+</body>
+</html>
