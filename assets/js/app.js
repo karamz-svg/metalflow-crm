@@ -264,38 +264,49 @@ window.App = window.App || {};
       '<div class="grid cards">' + html + "</div>";
   }
 
-  /* ---- Custom sheet (free-form, Excel-style) ---- */
+  /* ---- Custom sheet: your own categories (Limestone, Cement…) each with contacts ---- */
   function viewSheet() {
-    var rows = Store.sheetRows();
-    var prodOpts = App.PRODUCTS.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join("");
-
-    function row(r) {
-      var csel = '<select onchange="App.onSheetEdit(\'' + r.id + '\',\'country\',this.value)">' +
-        '<option value=""' + (!r.country ? " selected" : "") + ">—</option>" +
-        App.allCountries().map(function (x) {
-          return '<option value="' + x.code + '"' + (r.country === x.code ? " selected" : "") + ">" + x.flag + " " + esc(x.name) + "</option>";
-        }).join("") + "</select>";
+    var cats = Store.sheetCategories();
+    function countryOpts(sel) {
+      return '<option value="">—</option>' + App.allCountries().map(function (x) {
+        return '<option value="' + x.code + '"' + (sel === x.code ? " selected" : "") + ">" + x.flag + " " + esc(x.name) + "</option>";
+      }).join("");
+    }
+    function contactRow(catId, ct) {
+      function inp(field, ph) {
+        return '<input value="' + esc(ct[field]) + '" placeholder="' + ph + '" onchange="App.onSheetContact(\'' + catId + "','" + ct.id + "','" + field + '\',this.value)"/>';
+      }
       return "<tr>" +
-        '<td><input list="sheet-prod" value="' + esc(r.product) + '" placeholder="product" onchange="App.onSheetEdit(\'' + r.id + '\',\'product\',this.value)"/></td>' +
-        "<td>" + csel + "</td>" +
-        '<td><input value="' + esc(r.material) + '" placeholder="material" onchange="App.onSheetEdit(\'' + r.id + '\',\'material\',this.value)"/></td>' +
-        '<td><input value="' + esc(r.qty) + '" placeholder="qty / MT" onchange="App.onSheetEdit(\'' + r.id + '\',\'qty\',this.value)"/></td>' +
-        '<td><input value="' + esc(r.notes) + '" placeholder="notes" onchange="App.onSheetEdit(\'' + r.id + '\',\'notes\',this.value)"/></td>' +
-        '<td><button class="btn sm danger" data-action="sheet-del" data-id="' + r.id + '">🗑</button></td>' +
+        "<td>" + inp("name", "contact") + "</td>" +
+        "<td>" + inp("company", "company") + "</td>" +
+        '<td><select onchange="App.onSheetContact(\'' + catId + "','" + ct.id + "','country',this.value)\">" + countryOpts(ct.country) + "</select></td>" +
+        "<td>" + inp("email", "email") + "</td>" +
+        "<td>" + inp("phone", "phone") + "</td>" +
+        "<td>" + inp("notes", "notes") + "</td>" +
+        "<td>" + (ct.email ? '<span class="person-mail" data-action="sheet-email" data-cat="' + catId + '" data-id="' + ct.id + '" title="Email">✉️</span> ' : "") +
+          '<button class="btn sm danger" data-action="sheet-del-contact" data-cat="' + catId + '" data-id="' + ct.id + '">🗑</button></td>' +
         "</tr>";
     }
+    var blocks = cats.length ? cats.map(function (cat) {
+      var rows = (cat.contacts || []).map(function (ct) { return contactRow(cat.id, ct); }).join("");
+      return '<div class="card sheet-cat">' +
+        '<div class="sheet-cat-head">' +
+          '<input class="cat-name" value="' + esc(cat.name) + '" onchange="App.onSheetCat(\'' + cat.id + '\',this.value)"/>' +
+          '<span class="status-text">' + (cat.contacts || []).length + " contacts</span><div class=\"spacer\"></div>" +
+          '<button class="btn sm" data-action="sheet-add-contact" data-cat="' + cat.id + '">+ Contact</button>' +
+          '<button class="btn sm danger" data-action="sheet-del-cat" data-cat="' + cat.id + '">Delete category</button>' +
+        "</div>" +
+        ((cat.contacts || []).length
+          ? '<table class="sheet"><thead><tr><th>Contact</th><th>Company</th><th>Country</th><th>Email</th><th>Phone</th><th>Notes</th><th></th></tr></thead><tbody>' + rows + "</tbody></table>"
+          : '<div class="status-text" style="padding:8px 4px">No contacts yet — click “+ Contact”.</div>') +
+        "</div>";
+    }).join("") : '<div class="empty"><div class="big">📂</div><p>No categories yet. Add one (e.g. <strong>Limestone</strong>, <strong>Cement</strong>) and list its buyers underneath.</p></div>';
 
-    var body = rows.length
-      ? '<table class="sheet"><thead><tr><th>Product</th><th>Country</th><th>Material</th><th>Qty</th><th>Notes</th><th></th></tr></thead><tbody>' +
-        rows.map(row).join("") + "</tbody></table>"
-      : '<div class="empty"><div class="big">📝</div><p>Empty sheet — add your first row.</p></div>';
-
-    return '<datalist id="sheet-prod">' + prodOpts + "</datalist>" +
-      '<div class="page-head"><div><h2>Custom Sheet</h2>' +
-      '<div class="sub">A free-form tab — log any product, country and material combination, like an extra Excel sheet. Saved automatically.</div></div>' +
+    return '<div class="page-head"><div><h2>Custom Sheet</h2>' +
+      '<div class="sub">Your own categories (Limestone, Cement, anything) — each with its own contacts underneath. Saved automatically.</div></div>' +
       '<div class="spacer"></div>' +
-      '<button class="btn primary" data-action="sheet-add">+ Add row</button></div>' +
-      body;
+      '<button class="btn primary" data-action="sheet-add-cat">+ Add category</button></div>' +
+      blocks;
   }
 
   /* ---- Companies (all or by country) ---- */
@@ -436,8 +447,8 @@ window.App = window.App || {};
       '<div class="card-actions">' +
         '<button class="btn primary sm" data-action="send-email" data-id="' + c.id + '">✉️ Send email</button>' +
         '<button class="btn sm" data-action="make-offer" data-id="' + c.id + '">💰 Offer</button>' +
-        '<button class="btn sm" data-action="find-buyers" data-id="' + c.id + '">👥 Find buyers</button>' +
-        '<button class="btn sm" data-action="open-thread" data-id="' + c.id + '">🔎 View thread</button>' +
+        '<button class="btn sm" data-action="find-buyers" data-id="' + c.id + '">👥 More contacts</button>' +
+        '<button class="btn sm" data-action="open-thread" data-id="' + c.id + '">📧 Gmail history</button>' +
         '<button class="btn sm" data-action="edit-company" data-id="' + c.id + '">✎ Edit</button>' +
         '<button class="btn sm danger" data-action="del-company" data-id="' + c.id + '">🗑</button>' +
       "</div></div>";
@@ -529,6 +540,11 @@ window.App = window.App || {};
           return '<div class="tpl"><span>' + esc(t.name) + '</span><span class="p-actions"><button class="btn sm" data-action="edit-template" data-id="' + t.id + '">✎ Edit</button><button class="btn sm danger" data-action="del-template" data-id="' + t.id + '">🗑</button></span></div>';
         }).join("") : '<div class="status-text">No templates yet — the built-in pitch is used.</div>') + "</div>" +
         '<div class="btn-row" style="margin-top:10px;"><button class="btn" data-action="add-template">+ Add template</button><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📄 Offer &amp; LOI documents</h3>' +
+        '<div class="meta">Customise the offer (email + PDF) and the Letter of Intent. Placeholders: <span class="kbd">{{buyer}}</span> <span class="kbd">{{contact}}</span> <span class="kbd">{{lines}}</span> <span class="kbd">{{total}}</span> <span class="kbd">{{terms}}</span> <span class="kbd">{{validity}}</span> <span class="kbd">{{payment}}</span> <span class="kbd">{{notes}}</span> <span class="kbd">{{me}}</span> <span class="kbd">{{myCompany}}</span> <span class="kbd">{{date}}</span> <span class="kbd">{{products}}</span>.</div>' +
+        '<div class="field" style="margin-top:10px;"><label>Offer template (email &amp; PDF body)</label><textarea data-set="offerTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.offerTemplate || BUILTIN_OFFER) + "</textarea></div>" +
+        '<div class="field"><label>Letter of Intent (LOI) template</label><textarea data-set="loiTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.loiTemplate || BUILTIN_LOI) + "</textarea></div>" +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👥 Team sync (shared data)</h3>' +
         '<div class="meta">Share buyers, statuses and prices with teammates via the proxy. Everyone points at the same proxy URL and turns this on. Last-write-wins — click <strong>Pull</strong> to grab the latest before a big edit. Protect it with a token (proxy <span class="kbd">DATA_AUTH_TOKEN</span>).</div>' +
         '<label class="check" style="margin:12px 0;"><input type="checkbox" data-set-bool="teamSync"' + (s.teamSync ? " checked" : "") + '> Enable team sync</label>' +
@@ -622,6 +638,39 @@ window.App = window.App || {};
   }
 
   /* ---- Offer / quote generator ---- */
+  var BUILTIN_OFFER =
+    "Dear {{contact}},\n\nThank you for your interest. Please find our offer below:\n\n{{lines}}\n\n" +
+    "Total: {{total}}\nTerms: {{terms}} · Validity: {{validity}} · Payment: {{payment}}\n{{notes}}\n\n" +
+    "Prices are formula-linked to the prevailing LME and confirmed at contract.\n\nBest regards,\n{{me}}\n{{myCompany}}";
+  var BUILTIN_LOI =
+    "LETTER OF INTENT\n\nDate: {{date}}\nFrom: {{myCompany}}\nTo: {{buyer}}\n\n" +
+    "We, {{myCompany}}, hereby confirm our firm intention to supply the following material(s) to {{buyer}} " +
+    "under the terms stated below:\n\n{{lines}}\n\nTotal value: {{total}}\nDelivery terms: {{terms}}\n" +
+    "Validity: {{validity}}\nPayment: {{payment}}\n\nThis Letter of Intent is issued in good faith and is subject to the " +
+    "signing of a formal sales and purchase contract and mutually agreed terms and conditions.\n\nAuthorised signatory:\n{{me}}\n{{myCompany}}";
+
+  function applyTpl(tpl, map) {
+    return String(tpl || "").replace(/\{\{\w+\}\}/g, function (m) { return map[m] != null ? map[m] : m; });
+  }
+  function offerMap(company, o) {
+    var s = Store.settings();
+    var lt = offerLinesText(o);
+    return {
+      "{{buyer}}": company.name || "your company",
+      "{{contact}}": company.contactName ? company.contactName.split(/\s+/)[0] : "Sir or Madam",
+      "{{lines}}": lt.rows,
+      "{{total}}": lt.grand,
+      "{{terms}}": o.inco + (o.port ? " " + o.port : ""),
+      "{{validity}}": o.validity,
+      "{{payment}}": o.payment,
+      "{{notes}}": o.notes || "",
+      "{{me}}": s.senderName || "",
+      "{{myCompany}}": s.companyName || "",
+      "{{date}}": new Date().toLocaleDateString(),
+      "{{products}}": o.lines.map(function (l) { return l.name; }).join(", ")
+    };
+  }
+
   function productBaseUSD(p) {
     var pr = Store.prices();
     if (!p) return null;
@@ -667,7 +716,8 @@ window.App = window.App || {};
         '<div class="field"><label>Validity</label><input id="offer-valid" value="7 days" /></div>' +
         '<div class="field"><label>Payment</label><input id="offer-pay" value="TT / LC at sight" /></div>' +
       "</div>" +
-      '<div class="field"><label>Notes</label><input id="offer-notes" placeholder="Inspection: SGS; packing: …"/></div>';
+      '<div class="field"><label>Notes</label><input id="offer-notes" placeholder="Inspection: SGS; packing: …"/></div>' +
+      '<label class="check" style="margin-top:4px;"><input type="checkbox" id="offer-loi"> Attach official Letter of Intent (LOI) — editable in Settings</label>';
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
       '<button class="btn" data-action="print-offer" data-id="' + c.id + '">🖨 Print / PDF</button>' +
       '<button class="btn primary" data-action="email-offer" data-id="' + c.id + '">✉️ Email offer</button>';
@@ -720,23 +770,25 @@ window.App = window.App || {};
 
   function pricesForm() {
     var p = Store.prices();
-    function row(label, key, hasPrem) {
-      var r = p.rows[key] || {};
-      var prem = hasPrem
-        ? '<div class="field"><label>EU duty-paid premium (USD/MT)</label><input type="number" data-price-prem="' + key + '" value="' + (r.premium == null ? "" : r.premium) + '" placeholder="e.g. 290"/></div>'
+    function row(r) {
+      var rr = p.rows[r.key] || {};
+      var unit = r.unit || "USD/MT";
+      var prem = r.hasPremium
+        ? '<div class="field"><label>' + esc(r.premiumLabel || "Premium") + ' (USD/MT)</label><input type="number" data-price-prem="' + r.key + '" value="' + (rr.premium == null ? "" : rr.premium) + '" placeholder="e.g. 290"/></div>'
         : "";
-      return '<div class="field-2"><div class="field"><label>' + esc(label) + ' (USD/MT)</label>' +
-        '<input type="number" data-price="' + key + '" value="' + (r.value == null ? "" : r.value) + '" placeholder="e.g. 9000"/></div>' + prem + "</div>";
+      return '<div class="field-2"><div class="field"><label>' + esc(r.label) + " (" + esc(unit) + ")</label>" +
+        '<input type="number" data-price="' + r.key + '" value="' + (rr.value == null ? "" : rr.value) + '" placeholder="e.g. 9000"/></div>' + prem + "</div>";
     }
     var body =
-      '<div class="notice">Enter today\'s LME settlement prices. They appear on the price bar and in every email draft. ' +
-      'For the aluminium EU premium see <a href="' + App.PREMIUM_SOURCE_URL + '" target="_blank" rel="noopener">the LME premium page</a>.</div>' +
-      App.PRICE_ROWS.map(function (r) { return row(r.label, r.key, r.hasPremium); }).join("") +
+      '<div class="notice">Enter today\'s prices. <strong>Gold, Copper &amp; Aluminium auto-fill from the free feed</strong>; ' +
+      '<strong>Zinc, Lead, Nickel and the premiums have no free source</strong>, so set them here once (they persist and show on the ticker). ' +
+      'Aluminium EU premium reference: <a href="' + App.PREMIUM_SOURCE_URL + '" target="_blank" rel="noopener">LME premium page</a>.</div>' +
+      App.PRICE_ROWS.map(function (r) { return row(r); }).join("") +
       '<div class="field"><label>Source label</label><input data-price-src value="' + esc(p.source) + '" placeholder="Manual / LME / SMM"/></div>';
     var footer =
       '<button class="btn" data-action="close-modal">Cancel</button>' +
       '<button class="btn primary" data-action="save-prices">Save prices</button>';
-    openModal("Update LME prices", body, footer);
+    openModal("Update prices & premiums", body, footer);
   }
 
   function importForm() {
@@ -998,8 +1050,25 @@ window.App = window.App || {};
         break;
       }
 
-      case "sheet-add": Store.addSheetRow(); render(); break;
-      case "sheet-del": Store.deleteSheetRow(id); render(); break;
+      case "sheet-add-cat": Store.addSheetCategory("New category"); render(); break;
+      case "sheet-del-cat": {
+        var cat = a.getAttribute("data-cat");
+        if (confirm("Delete this category and its contacts?")) { Store.deleteSheetCategory(cat); render(); }
+        break;
+      }
+      case "sheet-add-contact": Store.addSheetContact(a.getAttribute("data-cat")); render(); break;
+      case "sheet-del-contact": Store.deleteSheetContact(a.getAttribute("data-cat"), id); render(); break;
+      case "sheet-email": {
+        var cat2 = (Store.sheetCategories().find(function (x) { return x.id === a.getAttribute("data-cat"); }) || {});
+        var ct = (cat2.contacts || []).find(function (x) { return x.id === id; });
+        if (ct && ct.email) {
+          var s2 = Store.settings();
+          var greet = ct.name ? "Dear " + ct.name.split(/\s+/)[0] + "," : "Dear Sir or Madam,";
+          var bd = greet + "\n\nWe are a direct supplier of " + (cat2.name || "metals") + ". We would welcome the opportunity to supply " + (ct.company || "your company") + ".\n\nBest regards,\n" + (s2.senderName || "") + "\n" + (s2.companyName || "");
+          window.open("https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(ct.email) + "&su=" + encodeURIComponent((s2.companyName || "") + " — " + (cat2.name || "supply")) + "&body=" + encodeURIComponent(bd), "_blank");
+        }
+        break;
+      }
       case "edit-company": companyForm(company); break;
 
       case "save-company": {
@@ -1079,15 +1148,12 @@ window.App = window.App || {};
         var o = readOffer(mo);
         if (!o.lines.length) { toast("No priced products to offer."); break; }
         var s = Store.settings();
-        var lt = offerLinesText(o);
-        var greeting = company.contactName ? "Dear " + (company.contactName.split(/\s+/)[0]) + "," : "Dear Sir or Madam,";
-        var subject = s.companyName + " — offer for " + company.name;
-        var bodyTxt = greeting + "\n\nPlease find our offer below:\n\n" + lt.rows +
-          "\n\nTotal: " + lt.grand +
-          "\nTerms: " + o.inco + (o.port ? " " + o.port : "") + " · Validity: " + o.validity + " · Payment: " + o.payment +
-          (o.notes ? "\nNotes: " + o.notes : "") +
-          "\n\nPrices are formula-linked to the prevailing LME and confirmed at contract.\n\nBest regards,\n" +
-          s.senderName + (s.senderTitle ? "\n" + s.senderTitle : "") + "\n" + s.companyName + (s.phone ? "\nTel: " + s.phone : "");
+        var map = offerMap(company, o);
+        var subject = (s.companyName || "Offer") + " — offer for " + (company.name || "");
+        var bodyTxt = applyTpl(s.offerTemplate || BUILTIN_OFFER, map);
+        if (mo.querySelector("#offer-loi") && mo.querySelector("#offer-loi").checked) {
+          bodyTxt += "\n\n――――――――――\n" + applyTpl(s.loiTemplate || BUILTIN_LOI, map);
+        }
         var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(company.email || "") +
           "&su=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(bodyTxt);
         window.open(url, "_blank");
@@ -1101,37 +1167,32 @@ window.App = window.App || {};
       case "print-offer": {
         var pmo = a.closest(".modal");
         var po = readOffer(pmo);
+        if (!po.lines.length) { toast("No priced products to offer."); break; }
         var ps = Store.settings();
-        var plt = offerLinesText(po);
-        var sym = Prices.currencySymbol();
-        var rowsHtml = po.lines.map(function (l) {
-          return "<tr><td>" + l.name + "</td><td style='text-align:right'>" + l.qty + " MT</td><td style='text-align:right'>" +
-            sym + Prices.fmt(Prices.toDisplay(l.unit)) + "/MT</td><td style='text-align:right'>" + sym + Prices.fmt(Prices.toDisplay(l.total)) + "</td></tr>";
-        }).join("");
-        var grand = po.lines.reduce(function (x, l) { return x + l.total; }, 0);
+        var pmap = offerMap(company, po);
+        var offerBody = applyTpl(ps.offerTemplate || BUILTIN_OFFER, pmap);
+        var loiBody = (pmo.querySelector("#offer-loi") && pmo.querySelector("#offer-loi").checked)
+          ? applyTpl(ps.loiTemplate || BUILTIN_LOI, pmap) : "";
         var w = window.open("", "_blank");
         if (!w) { toast("Allow pop-ups to print the offer."); break; }
+        var head = "<h1>" + esc(ps.companyName || "Offer") + "</h1>" +
+          "<div class='muted'>" + esc(ps.senderName || "") + (ps.phone ? " · " + esc(ps.phone) : "") + (ps.senderEmail ? " · " + esc(ps.senderEmail) : "") + "</div><hr>";
         w.document.write(
-          "<html><head><title>Offer — " + (company.name || "") + "</title><style>" +
-          "body{font-family:Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{font-size:20px}" +
-          "table{width:100%;border-collapse:collapse;margin:16px 0}th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left}" +
-          ".tot{font-weight:bold;font-size:16px}.muted{color:#666;font-size:13px}</style></head><body>" +
-          "<h1>" + esc(ps.companyName || "Offer") + "</h1>" +
-          "<div class='muted'>" + esc(ps.senderName || "") + (ps.phone ? " · " + esc(ps.phone) : "") + (ps.senderEmail ? " · " + esc(ps.senderEmail) : "") + "</div>" +
-          "<p><strong>Offer to:</strong> " + esc(company.name || "") + "<br><strong>Date:</strong> " + new Date().toLocaleDateString() + "</p>" +
-          "<table><thead><tr><th>Product</th><th style='text-align:right'>Qty</th><th style='text-align:right'>Unit</th><th style='text-align:right'>Total</th></tr></thead><tbody>" +
-          rowsHtml + "</tbody></table>" +
-          "<p class='tot'>Total: " + sym + Prices.fmt(Prices.toDisplay(grand)) + "</p>" +
-          "<p class='muted'>Terms: " + esc(po.inco) + " " + esc(po.port) + " · Validity: " + esc(po.validity) + " · Payment: " + esc(po.payment) +
-          (po.notes ? "<br>Notes: " + esc(po.notes) : "") +
-          "<br>Prices are formula-linked to the prevailing LME and confirmed at contract.</p>" +
+          "<html><head><title>Offer — " + esc(company.name || "") + "</title><style>" +
+          "body{font-family:Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{font-size:20px;margin:0 0 4px}" +
+          ".muted{color:#666;font-size:13px}hr{border:none;border-top:1px solid #ddd;margin:14px 0}" +
+          "pre{white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.5}" +
+          ".pb{page-break-before:always}</style></head><body>" +
+          head + "<pre>" + esc(offerBody) + "</pre>" +
+          (loiBody ? "<div class='pb'></div>" + head + "<pre>" + esc(loiBody) + "</pre>" : "") +
           "</body></html>");
-        w.document.close(); w.focus(); setTimeout(function () { w.print(); }, 250);
-        Store.logActivity(id, "offer", "Offer printed (" + po.lines.length + " items)");
+        w.document.close(); w.focus(); setTimeout(function () { w.print(); }, 300);
+        Store.logActivity(id, "offer", "Offer printed (" + po.lines.length + " items)" + (loiBody ? " + LOI" : ""));
         break;
       }
 
-      case "toggle-currency": {        var cur = Store.settings().displayCurrency || "USD";
+      case "toggle-currency": {
+        var cur = Store.settings().displayCurrency || "USD";
         var next = cur === "USD" ? "EUR" : "USD";
         Store.updateSettings({ displayCurrency: next });
         renderPriceBar();
@@ -1359,9 +1420,10 @@ window.App = window.App || {};
     }
   });
 
-  App.onSheetEdit = function (id, field, value) {
+  App.onSheetCat = function (catId, value) { App.Store.renameSheetCategory(catId, value); };
+  App.onSheetContact = function (catId, contactId, field, value) {
     var patch = {}; patch[field] = value;
-    App.Store.updateSheetRow(id, patch);
+    App.Store.updateSheetContact(catId, contactId, patch);
   };
 
   App.onFilter = function (kind, value) {

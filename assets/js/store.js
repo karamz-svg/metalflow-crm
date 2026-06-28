@@ -35,7 +35,9 @@ window.App = window.App || {};
     templates: [],              // [{ id, name, subject, body }] email templates
     defaultTemplateId: "",      // template used by default when composing
     followUpDays: 4,            // a buyer stuck on 'awaiting reply' longer than this needs follow-up
-    alertPct: 2                 // flag a metal on the dashboard when it moves more than this %
+    alertPct: 2,                // flag a metal on the dashboard when it moves more than this %
+    offerTemplate: "",          // custom offer email/PDF body (blank = built-in)
+    loiTemplate: ""             // custom Letter of Intent body (blank = built-in)
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -123,6 +125,17 @@ window.App = window.App || {};
     if (!s.settings.margins || typeof s.settings.margins !== "object") s.settings.margins = {};
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
+    // migrate legacy flat sheet rows -> categories with contacts
+    if (s.sheet.some(function (x) { return x && !Array.isArray(x.contacts); })) {
+      var cats = s.sheet.filter(function (x) { return x && Array.isArray(x.contacts); });
+      var legacy = s.sheet.filter(function (x) { return x && !Array.isArray(x.contacts); });
+      if (legacy.length) {
+        cats.push({ id: "c" + Date.now().toString(36), name: "General", contacts: legacy.map(function (r) {
+          return { id: "c" + Math.random().toString(36).slice(2, 8), name: r.product || r.material || "", company: "", email: "", phone: "", country: r.country || "", notes: [r.material, r.qty, r.notes].filter(Boolean).join(" · ") };
+        }) });
+      }
+      s.sheet = cats;
+    }
     if (typeof s.rev !== "number") s.rev = 0;
     return s;
   }
@@ -391,19 +404,36 @@ window.App = window.App || {};
       save();
     },
 
-    /* ---------- Custom sheet ---------- */
-    sheetRows: function () { var s = load(); if (!s.sheet) s.sheet = []; return s.sheet; },
-    addSheetRow: function (data) {
-      var s = load(); if (!s.sheet) s.sheet = [];
-      var r = Object.assign({ id: uid(), product: "", country: "", material: "", qty: "", notes: "" }, data || {});
-      s.sheet.push(r); save(); return r;
+    /* ---------- Custom sheet (categories → contacts) ---------- */
+    sheetCategories: function () { var s = load(); if (!Array.isArray(s.sheet)) s.sheet = []; return s.sheet; },
+    addSheetCategory: function (name) {
+      var s = load(); if (!Array.isArray(s.sheet)) s.sheet = [];
+      var cat = { id: uid(), name: name || "New category", contacts: [] };
+      s.sheet.push(cat); save(); return cat;
     },
-    updateSheetRow: function (id, patch) {
-      var r = (load().sheet || []).find(function (x) { return x.id === id; });
-      if (r) { Object.assign(r, patch); save(); }
+    renameSheetCategory: function (id, name) {
+      var c = (load().sheet || []).find(function (x) { return x.id === id; });
+      if (c) { c.name = name; save(); }
     },
-    deleteSheetRow: function (id) {
+    deleteSheetCategory: function (id) {
       var s = load(); s.sheet = (s.sheet || []).filter(function (x) { return x.id !== id; }); save();
+    },
+    addSheetContact: function (catId, data) {
+      var c = (load().sheet || []).find(function (x) { return x.id === catId; });
+      if (!c) return;
+      if (!Array.isArray(c.contacts)) c.contacts = [];
+      c.contacts.push(Object.assign({ id: uid(), name: "", company: "", email: "", phone: "", country: "", notes: "" }, data || {}));
+      save();
+    },
+    updateSheetContact: function (catId, contactId, patch) {
+      var c = (load().sheet || []).find(function (x) { return x.id === catId; });
+      if (!c) return;
+      var ct = (c.contacts || []).find(function (x) { return x.id === contactId; });
+      if (ct) { Object.assign(ct, patch); save(); }
+    },
+    deleteSheetContact: function (catId, contactId) {
+      var c = (load().sheet || []).find(function (x) { return x.id === catId; });
+      if (c) { c.contacts = (c.contacts || []).filter(function (x) { return x.id !== contactId; }); save(); }
     },
 
     /* ---------- Team sync hooks ---------- */
