@@ -511,6 +511,22 @@ function dataAuthOK(req) {
   return (req.headers["x-data-token"] || "") === DATA_AUTH_TOKEN;
 }
 
+/* ---------------- Email engagement tracking ----------------
+   A tracked link in outgoing emails hits GET /api/track?c=<id>; we log
+   the click and redirect to TRACK_REDIRECT_URL (e.g. your catalogue/site).
+   The app polls GET /api/track-opens?ids=.. to show engagement. */
+const TRACK_REDIRECT_URL = process.env.TRACK_REDIRECT_URL || "https://www.lme.com/";
+const TRACK_FILE = path.join(__dirname, "..", ".track-store.json");
+function loadTrack() { try { return JSON.parse(fs.readFileSync(TRACK_FILE, "utf8")); } catch (e) { return {}; } }
+function saveTrack(o) { try { fs.writeFileSync(TRACK_FILE, JSON.stringify(o)); } catch (e) {} }
+function logTrack(id) {
+  if (!id) return;
+  var t = loadTrack();
+  t[id] = { count: ((t[id] && t[id].count) || 0) + 1, lastTs: Date.now() };
+  saveTrack(t);
+}
+const PIXEL = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+
 /* ---------------- server ---------------- */
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") return send(res, 204, {});
@@ -528,6 +544,25 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return send(res, 400, { error: e.message });
     }
+  }
+
+  // ---- Email engagement tracking ----
+  if (req.method === "GET" && path === "/api/track") {
+    var q = new URLSearchParams(req.url.split("?")[1] || "");
+    logTrack(q.get("c") || "");
+    if (q.get("p") === "1") { // pixel mode
+      res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store", "Content-Length": PIXEL.length });
+      return res.end(PIXEL);
+    }
+    res.writeHead(302, { Location: TRACK_REDIRECT_URL });
+    return res.end();
+  }
+  if (req.method === "GET" && path === "/api/track-opens") {
+    var tq = new URLSearchParams(req.url.split("?")[1] || "");
+    var ids = (tq.get("ids") || "").split(",").filter(Boolean);
+    var store = loadTrack(); var out = {};
+    ids.forEach(function (id) { if (store[id]) out[id] = store[id]; });
+    return send(res, 200, { opens: out });
   }
 
   // ---- Team data store (shared state) ----

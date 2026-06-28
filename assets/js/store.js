@@ -7,6 +7,7 @@ window.App = window.App || {};
   "use strict";
 
   var KEY = "metals-crm-state-v1";
+  var BKEY = "metals-crm-state-v1-snapshot";
 
   var DEFAULT_SETTINGS = {
     senderName: "Your Name",
@@ -38,7 +39,10 @@ window.App = window.App || {};
     alertPct: 2,                // flag a metal on the dashboard when it moves more than this %
     offerTemplate: "",          // custom offer email/PDF body (blank = built-in)
     loiTemplate: "",            // custom Letter of Intent body (blank = built-in)
-    docTemplates: {}            // { sco, icpo, ncnda, contract } custom trade-doc bodies
+    docTemplates: {},           // { sco, icpo, ncnda, contract } custom trade-doc bodies
+    autoBackup: true,           // keep a daily local snapshot for one-click restore
+    autoFollowupTask: true,     // auto-create a follow-up task when you email a buyer
+    trackEmails: false          // append a tracked link to outgoing emails (needs public proxy)
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -495,6 +499,31 @@ window.App = window.App || {};
     },
     deleteCustomProduct: function (id) { var s = load(); s.customProducts = (s.customProducts || []).filter(function (x) { return x.id !== id; }); save(); },
     priceAlerts: function () { var s = load(); if (!Array.isArray(s.priceAlerts)) s.priceAlerts = []; return s.priceAlerts; },
+
+    /* ---------- Local backup snapshots ---------- */
+    takeSnapshot: function () {
+      try { localStorage.setItem(BKEY, JSON.stringify({ ts: Date.now(), state: load() })); return true; } catch (e) { return false; }
+    },
+    lastSnapshot: function () {
+      try { return JSON.parse(localStorage.getItem(BKEY)); } catch (e) { return null; }
+    },
+    restoreSnapshot: function () {
+      var b = this.lastSnapshot();
+      if (b && b.state && Array.isArray(b.state.companies)) { state = normalize(b.state); save(); return true; }
+      return false;
+    },
+
+    /* ---------- Email open/engagement tracking ---------- */
+    applyOpens: function (map) {
+      if (!map) return 0;
+      var n = 0;
+      load().companies.forEach(function (c) {
+        var rec = map[c.id];
+        if (rec && rec.count) { c.opens = { count: rec.count, lastTs: rec.lastTs }; n++; }
+      });
+      if (n) save();
+      return n;
+    },
 
     /* ---------- Team sync hooks ---------- */
     setChangeHook: function (fn) { changeHook = fn; },

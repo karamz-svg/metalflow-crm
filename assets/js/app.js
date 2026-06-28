@@ -32,6 +32,19 @@ window.App = window.App || {};
     return digits ? "https://wa.me/" + digits : "";
   }
   App.waUrl = waUrl;
+  function snapInfo() {
+    var b = Store.lastSnapshot();
+    return (b && b.ts) ? "Last local snapshot: " + new Date(b.ts).toLocaleString() : "No local snapshot yet.";
+  }
+  App.onRestoreFile = function (input) {
+    var f = input.files && input.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try { App.Store.importJSON(String(r.result)); render(); toast("Backup restored."); }
+      catch (e) { toast("Restore failed: " + e.message); }
+    };
+    r.readAsText(f);
+  };
 
   function toast(msg) {
     var root = $("toast-root");
@@ -367,6 +380,7 @@ window.App = window.App || {};
           '<div class="deal-m">' + esc(d.buyer || "") + (d.product ? " · " + esc(d.product) : "") + "</div>" +
           '<div class="deal-v">' + (d.value ? Prices.money(Number(d.value)) : "—") + "</div>" +
           '<div class="deal-actions">' + sel +
+            '<button class="btn sm" data-action="deal-docs" data-id="' + d.id + '" title="Generate documents">📄</button>' +
             '<button class="btn sm" data-action="edit-deal" data-id="' + d.id + '">✎</button>' +
             '<button class="btn sm danger" data-action="del-deal" data-id="' + d.id + '">🗑</button>' +
           "</div></div>";
@@ -603,6 +617,7 @@ window.App = window.App || {};
       '<button class="btn" data-action="bulk-find"' + (countryCode ? ' data-country="' + countryCode + '"' : "") + '>👥 Find buyers (all)</button>' +
       (countryCode ? '<button class="btn" data-action="discover-companies" data-country="' + countryCode + '">🔎 Discover companies</button>' : "") +
       '<button class="btn" data-action="sync-gmail">📥 Sync Gmail</button>' +
+      '<button class="btn" data-action="check-opens">👁 Check opens</button>' +
       '<button class="btn" data-action="import">⇪ Import CSV</button>' +
       '<button class="btn" data-action="export">⇩ Export</button>' +
       ((countryCode && App.countryByCode(countryCode) && App.countryByCode(countryCode).custom)
@@ -648,6 +663,8 @@ window.App = window.App || {};
 
     var replyBadge = c.status === "green"
       ? '<span class="reply-badge" data-action="open-thread" data-id="' + c.id + '">📬 Read reply</span>' : "";
+    var opensBadge = (c.opens && c.opens.count)
+      ? '<span class="opens-badge" title="clicked your tracked link ' + c.opens.count + '×">👁 ' + c.opens.count + "</span>" : "";
 
     var people = (c.people || []).map(function (p, idx) {
       var mail = p.email
@@ -695,7 +712,7 @@ window.App = window.App || {};
       peopleBlock +
       '<div class="status-line">' +
         '<div class="lights">' + light("red", "Not contacted") + light("yellow", "Awaiting reply") + light("green", "Replied") + "</div>" +
-        '<span class="status-text">' + esc(statusText) + "</span>" + replyBadge +
+        '<span class="status-text">' + esc(statusText) + "</span>" + replyBadge + opensBadge +
       "</div>" +
       '<div class="card-actions">' +
         '<button class="btn primary sm" data-action="send-email" data-id="' + c.id + '">✉️ Send email</button>' +
@@ -773,13 +790,24 @@ window.App = window.App || {};
         '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button>' +
           '<button class="btn" data-action="refresh-prices">↻ Fetch prices now</button></div>' +
       "</div>" +
-      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>Data</h3>' +
-        '<div class="meta">Back up or move your buyer list between devices.</div>' +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>Data &amp; backup</h3>' +
+        '<div class="meta">Back up or move your data, and keep an automatic daily local snapshot you can restore.</div>' +
+        '<label class="check" style="margin:10px 0;"><input type="checkbox" data-set-bool="autoBackup"' + (s.autoBackup !== false ? " checked" : "") + '> Keep a daily local snapshot (auto-backup)</label>' +
+        '<label class="check" style="margin:0 0 10px;"><input type="checkbox" data-set-bool="autoFollowupTask"' + (s.autoFollowupTask !== false ? " checked" : "") + '> Auto-create a follow-up task when I email a buyer</label>' +
+        '<div class="meta" id="snap-info">' + snapInfo() + "</div>" +
+        '<input type="file" id="restore-file" accept=".json,application/json" style="display:none" onchange="App.onRestoreFile(this)"/>' +
         '<div class="btn-row" style="margin-top:10px;">' +
-          '<button class="btn" data-action="import">⇪ Import CSV / JSON</button>' +
-          '<button class="btn" data-action="export">⇩ Export backup (JSON)</button>' +
+          '<button class="btn" data-action="export">⇩ Download backup (JSON)</button>' +
+          '<button class="btn" data-action="restore-file">⇪ Restore from file</button>' +
+          '<button class="btn" data-action="import">📋 Import CSV / paste</button>' +
+          '<button class="btn" data-action="restore-snapshot">↩ Restore last snapshot</button>' +
+          '<button class="btn" data-action="save-settings">Save</button>' +
           '<button class="btn danger" data-action="reset">Reset all data</button>' +
         "</div></div>" +
+      '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👁 Email tracking</h3>' +
+        '<div class="meta">Append a tracked link to outgoing emails; when the buyer clicks it your proxy logs it and you see 👁 on their card. Needs the proxy reachable publicly (set TRACK_REDIRECT_URL). Use “Check opens” on the buyers list.</div>' +
+        '<label class="check" style="margin:10px 0;"><input type="checkbox" data-set-bool="trackEmails"' + (s.trackEmails ? " checked" : "") + '> Add tracked link to emails</label>' +
+        '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📊 Offer margins</h3>' +
         '<div class="meta">Your margin % over the live metal price, used by the offer generator. Use negative values for scrap discounts.</div>' +
         '<div class="margins">' + App.allProducts().map(function (pp) {
@@ -985,15 +1013,17 @@ window.App = window.App || {};
   function docMap(c) {
     var s = Store.settings();
     var products = (c.materials || []).map(function (id) { var p = App.productById(id); return p ? p.name : null; }).filter(Boolean);
+    var lines = (c._dealLines != null) ? (c._dealLines || "  • (on request)")
+      : (products.length ? products.map(function (n) { return "  • " + n + " — qty/price on request"; }).join("\n") : "  • (materials on request)");
     return {
       "{{buyer}}": c.name || "the Buyer",
       "{{contact}}": c.contactName || "________",
-      "{{lines}}": products.length ? products.map(function (n) { return "  • " + n + " — qty/price on request"; }).join("\n") : "  • (materials on request)",
-      "{{total}}": "on request",
-      "{{terms}}": "CIF (port TBA)",
+      "{{lines}}": lines,
+      "{{total}}": (c._dealTotal != null && c._dealTotal !== "") ? c._dealTotal : "on request",
+      "{{terms}}": c._terms || "CIF (port TBA)",
       "{{payment}}": "TT / LC at sight",
       "{{validity}}": "7 days",
-      "{{notes}}": "",
+      "{{notes}}": c.notes || "",
       "{{me}}": s.senderName || "________",
       "{{myCompany}}": s.companyName || "________",
       "{{date}}": new Date().toLocaleDateString(),
@@ -1006,22 +1036,24 @@ window.App = window.App || {};
     if (type === "loi") return s.loiTemplate || BUILTIN_LOI;
     return (s.docTemplates && s.docTemplates[type]) || BUILTIN_DOCS[type] || "";
   }
-  App.fillDoc = function (cid) {
-    var c = Store.companyById(cid); if (!c) return;
+  App.fillDoc = function () {
+    var c = App._docCompany || {};
     var type = ($("doc-type") || {}).value;
     if ($("doc-body")) $("doc-body").value = applyTpl(docTemplate(type), docMap(c));
   };
   function docForm(c) {
+    App._docCompany = c || {};
+    App._docRecipient = { email: c.email || "", name: c.name || "", logId: c.id || "" };
     var types = [["offer", "Offer"], ["loi", "Letter of Intent (LOI)"], ["sco", "Soft Corporate Offer (SCO)"], ["icpo", "ICPO"], ["ncnda", "NCNDA"], ["contract", "Sales Contract"]];
     var sel = types.map(function (t) { return '<option value="' + t[0] + '">' + t[1] + "</option>"; }).join("");
-    var body = '<div class="field"><label>Document type</label><select id="doc-type" onchange="App.fillDoc(\'' + c.id + '\')">' + sel + "</select></div>" +
+    var body = '<div class="field"><label>Document type</label><select id="doc-type" onchange="App.fillDoc()">' + sel + "</select></div>" +
       '<div class="field"><label>Preview (edit before sending; templates live in Settings)</label>' +
       '<textarea id="doc-body" style="min-height:260px;font-family:monospace;font-size:12px"></textarea></div>';
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
-      '<button class="btn" data-action="doc-print" data-id="' + c.id + '">🖨 Print / PDF</button>' +
-      '<button class="btn primary" data-action="doc-email" data-id="' + c.id + '">✉️ Email</button>';
+      '<button class="btn" data-action="doc-print">🖨 Print / PDF</button>' +
+      '<button class="btn primary" data-action="doc-email">✉️ Email</button>';
     openModal("📄 Documents — " + (c.name || ""), body, footer);
-    setTimeout(function () { App.fillDoc(c.id); }, 0);
+    setTimeout(function () { App.fillDoc(); }, 0);
   }
 
   function applyTplPlaceholder() {}
@@ -1501,6 +1533,7 @@ window.App = window.App || {};
         Store.updateCompany(id, { lastEmailAt: Date.now(), lastEmailSubject: Email.buildDraft(company).subject });
         if (company.status === "red") Store.setStatus(id, "yellow", {});
         Store.logActivity(id, "email", "Email drafted to " + company.email);
+        addFollowupTask(company);
         render();
         toast("Opened Gmail with a pre-written email. Review & send.");
         break;
@@ -1561,16 +1594,32 @@ window.App = window.App || {};
 
       case "make-offer": offerForm(company); break;
       case "make-docs": docForm(company); break;
+      case "deal-docs": {
+        var deal = Store.deals().find(function (x) { return x.id === id; });
+        if (!deal) break;
+        var buyer = deal.buyerId ? Store.companyById(deal.buyerId) : null;
+        docForm({
+          id: buyer ? buyer.id : "", name: deal.buyer || (buyer && buyer.name) || "Buyer",
+          contactName: buyer ? buyer.contactName : "", email: buyer ? buyer.email : "", materials: [],
+          notes: deal.notes || "", _terms: deal.dischargePort ? "CIF " + deal.dischargePort : "",
+          _dealLines: deal.product ? ("  • " + deal.product + (deal.value ? " — " + Prices.money(Number(deal.value)) : "")) : "",
+          _dealTotal: deal.value ? Prices.money(Number(deal.value)) : ""
+        });
+        break;
+      }
       case "doc-email": {
         var dm2 = a.closest(".modal");
         var txt = (dm2.querySelector("#doc-body") || {}).value || "";
         var dtype = (dm2.querySelector("#doc-type") || {}).value || "document";
-        var subj = (Store.settings().companyName || "") + " — " + dtype.toUpperCase() + " — " + (company.name || "");
-        window.open("https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(company.email || "") +
+        var rcp = App._docRecipient || {};
+        var subj = (Store.settings().companyName || "") + " — " + dtype.toUpperCase() + " — " + (rcp.name || "");
+        window.open("https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(rcp.email || "") +
           "&su=" + encodeURIComponent(subj) + "&body=" + encodeURIComponent(txt), "_blank");
-        Store.updateCompany(id, { lastEmailAt: Date.now() });
-        if (company.status === "red") Store.setStatus(id, "yellow", {});
-        Store.logActivity(id, "doc", dtype.toUpperCase() + " emailed");
+        if (rcp.logId) {
+          Store.updateCompany(rcp.logId, { lastEmailAt: Date.now() });
+          var cc = Store.companyById(rcp.logId); if (cc && cc.status === "red") Store.setStatus(rcp.logId, "yellow", {});
+          Store.logActivity(rcp.logId, "doc", dtype.toUpperCase() + " emailed");
+        }
         closeModal(); render(); toast("Opened Gmail with the document.");
         break;
       }
@@ -1578,10 +1627,11 @@ window.App = window.App || {};
         var dm3 = a.closest(".modal");
         var dtxt = (dm3.querySelector("#doc-body") || {}).value || "";
         var dt = (dm3.querySelector("#doc-type") || {}).value || "document";
+        var rcp2 = App._docRecipient || {};
         var ps2 = Store.settings();
         var w2 = window.open("", "_blank");
         if (!w2) { toast("Allow pop-ups to print."); break; }
-        w2.document.write("<html><head><title>" + esc(dt) + " — " + esc(company.name || "") + "</title><style>" +
+        w2.document.write("<html><head><title>" + esc(dt) + " — " + esc(rcp2.name || "") + "</title><style>" +
           "body{font-family:Arial,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{font-size:20px;margin:0 0 4px}" +
           ".muted{color:#666;font-size:13px}hr{border:none;border-top:1px solid #ddd;margin:14px 0}" +
           "pre{white-space:pre-wrap;font-family:Arial,sans-serif;font-size:14px;line-height:1.5}</style></head><body>" +
@@ -1589,7 +1639,7 @@ window.App = window.App || {};
           (ps2.phone ? " · " + esc(ps2.phone) : "") + (ps2.senderEmail ? " · " + esc(ps2.senderEmail) : "") + "</div><hr>" +
           "<pre>" + esc(dtxt) + "</pre></body></html>");
         w2.document.close(); w2.focus(); setTimeout(function () { w2.print(); }, 300);
-        Store.logActivity(id, "doc", dt.toUpperCase() + " printed");
+        if (rcp2.logId) Store.logActivity(rcp2.logId, "doc", dt.toUpperCase() + " printed");
         break;
       }
 
@@ -1821,6 +1871,8 @@ window.App = window.App || {};
         syncGmail();
         break;
 
+      case "check-opens": App.checkOpens(); break;
+
       case "team-pull":
         if (!App.Sync.enabled()) { toast("Enable team sync first (and Save)."); break; }
         toast("Pulling team data…");
@@ -1838,6 +1890,15 @@ window.App = window.App || {};
         break;
 
       case "import": importForm(); break;
+      case "restore-file": { var fi = $("restore-file"); if (fi) fi.click(); break; }
+      case "restore-snapshot": {
+        var b = Store.lastSnapshot();
+        if (!b || !b.ts) { toast("No snapshot saved yet."); break; }
+        if (confirm("Restore the snapshot from " + new Date(b.ts).toLocaleString() + "? Current data will be replaced.")) {
+          if (Store.restoreSnapshot()) { render(); toast("Snapshot restored."); }
+        }
+        break;
+      }
       case "load-eu-seed": {
         var added = Store.importSeed(App.EU_SEED || []);
         closeModal(); render();
@@ -1882,6 +1943,26 @@ window.App = window.App || {};
   };
   App.onDealStage = function (id, stage) { Store.updateDeal(id, { stage: stage }); render(); };
   App.onShip = function (id, field, value) { var p = {}; p[field] = value; Store.updateDeal(id, p); };
+
+  // Auto-create a follow-up task when you email a buyer (deduped, optional).
+  function addFollowupTask(company) {
+    if (!company || Store.settings().autoFollowupTask === false) return;
+    if (Store.tasks().some(function (t) { return !t.done && t.buyerId === company.id; })) return;
+    var d = new Date(Date.now() + (Number(Store.settings().followUpDays) || 4) * 86400000);
+    Store.addTask({ text: "Follow up: " + (company.name || "buyer"), due: d.toISOString().slice(0, 10), buyerId: company.id });
+  }
+
+  // Poll the proxy for email-link engagement and badge the buyers.
+  App.checkOpens = function () {
+    var base = (Store.settings().apolloProxyUrl || "http://localhost:8787").replace(/\/+$/, "");
+    var ids = Store.companies().map(function (c) { return c.id; }).join(",");
+    if (!ids) return;
+    toast("Checking engagement…");
+    fetch(base + "/api/track-opens?ids=" + encodeURIComponent(ids)).then(function (r) { return r.json(); }).then(function (j) {
+      var n = Store.applyOpens(j.opens || {}); render();
+      toast(n ? (n + " buyer(s) clicked your link.") : "No engagement recorded yet.");
+    }).catch(function () { toast("Couldn't reach the proxy for tracking."); });
+  };
   App.onGlobalSearch = function (v) {
     globalQ = v;
     if (route.view !== "search") route = { view: "search", country: null };
@@ -1976,6 +2057,13 @@ window.App = window.App || {};
     setTimeout(autoScanPrices, 700);
     if (App.Sync) App.Sync.init(function () { render(); toast("Pulled latest team data."); });
     startLiveTicker();
+    // daily local snapshot for safety
+    try {
+      if (Store.settings().autoBackup !== false) {
+        var b = Store.lastSnapshot();
+        if (!b || !b.ts || (Date.now() - b.ts) > 24 * 3600 * 1000) Store.takeSnapshot();
+      }
+    } catch (e) {}
   }
   document.addEventListener("DOMContentLoaded", boot);
   if (document.readyState !== "loading") boot();

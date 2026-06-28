@@ -78,6 +78,12 @@ window.App = window.App || {};
         (s.senderEmail ? "\n" + s.senderEmail : "") +
         (s.signature ? "\n\n" + s.signature : "");
 
+      // Optional engagement tracking link (logged by your proxy on click).
+      if (s.trackEmails && company.id) {
+        var base = (s.apolloProxyUrl || "").replace(/\/+$/, "");
+        if (base) body += "\n\nView our latest catalogue & prices: " + base + "/api/track?c=" + company.id;
+      }
+
       return { subject: subject, body: body };
     },
 

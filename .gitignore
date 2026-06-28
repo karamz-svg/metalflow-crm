@@ -9,6 +9,9 @@
 # Team-sync shared data store
 .data-store.json
 
+# Email-tracking store
+.track-store.json
+
 # Node
 node_modules/
 npm-debug.log*
