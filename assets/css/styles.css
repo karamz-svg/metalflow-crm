@@ -361,3 +361,10 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .calc-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13.5px; }
 .calc-row span:last-child { font-family: ui-monospace, Menlo, monospace; }
 .calc-row.strong { font-weight: 700; font-size: 15px; color: var(--accent); }
+
+
+/* ---------- WhatsApp ---------- */
+.btn.wa { color: #25d366; border-color: #1f7a44; text-decoration: none; }
+.btn.wa:hover { border-color: #25d366; }
+.person-wa { cursor: pointer; font-size: 14px; text-decoration: none; }
+.person-wa:hover { transform: scale(1.15); }

@@ -25,6 +25,11 @@ window.App = window.App || {};
   function opt(value, label, current) {
     return '<option value="' + esc(value) + '"' + (current === value ? " selected" : "") + ">" + esc(label) + "</option>";
   }
+  function waUrl(phone) {
+    var digits = String(phone || "").replace(/[^\d]/g, "");
+    return digits ? "https://wa.me/" + digits : "";
+  }
+  App.waUrl = waUrl;
 
   function toast(msg) {
     var root = $("toast-root");
@@ -105,6 +110,8 @@ window.App = window.App || {};
       item("dashboard", null, "📊", "Dashboard") +
       item("companies", null, "🏢", "All buyers", companies.length) +
       item("pipeline", null, "📈", "Pipeline", Store.deals().length || null) +
+      item("shipments", null, "🚢", "Shipments") +
+      item("reports", null, "📊", "Reports") +
       item("tasks", null, "✅", "Tasks", (Store.tasks().filter(function (t) { return !t.done; }).length) || null) +
       item("sheet", null, "📂", "Custom sheet", Store.sheetCategories().length || null) +
       item("calc", null, "🧮", "Calculator") +
@@ -140,6 +147,8 @@ window.App = window.App || {};
     else if (route.view === "products") c.innerHTML = viewProducts();
     else if (route.view === "sheet") c.innerHTML = viewSheet();
     else if (route.view === "pipeline") c.innerHTML = viewPipeline();
+    else if (route.view === "shipments") c.innerHTML = viewShipments();
+    else if (route.view === "reports") c.innerHTML = viewReports();
     else if (route.view === "tasks") c.innerHTML = viewTasks();
     else if (route.view === "calc") c.innerHTML = viewCalc();
     else if (route.view === "settings") c.innerHTML = viewSettings();
@@ -358,6 +367,65 @@ window.App = window.App || {};
       '<div class="pipe-board">' + cols + "</div>";
   }
 
+  /* ---- Shipments / logistics ---- */
+  function viewShipments() {
+    var deals = Store.deals().filter(function (d) {
+      return d.bl || d.container || d.vessel || d.eta || d.shipStatus || d.stage === "contract" || d.stage === "won";
+    });
+    var statuses = ["", "Booked", "Loading", "In transit", "Arrived", "Delivered", "Delayed"];
+    var rows = deals.map(function (d) {
+      var sel = '<select onchange="App.onShip(\'' + d.id + '\',\'shipStatus\',this.value)">' +
+        statuses.map(function (x) { return '<option value="' + x + '"' + ((d.shipStatus || "") === x ? " selected" : "") + ">" + (x || "—") + "</option>"; }).join("") + "</select>";
+      function cell(k) { return '<td><input value="' + esc(d[k] || "") + '" onchange="App.onShip(\'' + d.id + "','" + k + '\',this.value)"/></td>'; }
+      return "<tr>" +
+        "<td>" + esc(d.title || "(deal)") + '<div class="status-text">' + esc(d.buyer || "") + "</div></td>" +
+        cell("bl") + cell("container") + cell("vessel") + cell("loadPort") + cell("dischargePort") +
+        '<td><input type="date" value="' + esc(d.eta || "") + '" onchange="App.onShip(\'' + d.id + '\',\'eta\',this.value)"/></td>' +
+        "<td>" + sel + "</td></tr>";
+    }).join("");
+    return '<div class="page-head"><div><h2>Shipments &amp; logistics</h2>' +
+      '<div class="sub">Track contracted/won deals from booking to delivery. Add shipment details in a deal.</div></div></div>' +
+      (deals.length
+        ? '<table class="sheet"><thead><tr><th>Deal</th><th>B/L</th><th>Container</th><th>Vessel</th><th>Load</th><th>Discharge</th><th>ETA</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table>"
+        : '<div class="empty"><div class="big">🚢</div><p>No shipments yet. Move a deal to Contract/Won or add B/L & ETA in a deal.</p></div>');
+  }
+
+  /* ---- Reports / P&L ---- */
+  function viewReports() {
+    var deals = Store.deals();
+    var won = deals.filter(function (d) { return d.stage === "won"; });
+    var open = deals.filter(function (d) { return d.stage !== "won" && d.stage !== "lost"; });
+    function sum(arr, f) { return arr.reduce(function (a, d) { return a + (Number(d[f]) || 0); }, 0); }
+    var wonRev = sum(won, "value"), wonCost = sum(won, "cost"), wonProfit = wonRev - wonCost;
+    var openRev = sum(open, "value"), openProfit = openRev - sum(open, "cost");
+    var margin = wonRev ? Math.round(wonProfit / wonRev * 100) : 0;
+
+    // by product (won)
+    var byProd = {}; won.forEach(function (d) { var k = d.product || "—"; byProd[k] = byProd[k] || { rev: 0, profit: 0 }; byProd[k].rev += Number(d.value) || 0; byProd[k].profit += (Number(d.value) || 0) - (Number(d.cost) || 0); });
+    var prodRows = Object.keys(byProd).map(function (k) {
+      return "<tr><td>" + esc(k) + "</td><td>" + Prices.money(byProd[k].rev) + "</td><td>" + Prices.money(byProd[k].profit) + "</td></tr>";
+    }).join("") || '<tr><td colspan="3" class="status-text">No won deals yet.</td></tr>';
+
+    // by month (won)
+    var byMonth = {}; won.forEach(function (d) { var m = new Date(d.updatedAt || d.createdAt || Date.now()).toLocaleDateString("en-GB", { month: "short", year: "2-digit" }); byMonth[m] = byMonth[m] || { rev: 0, profit: 0 }; byMonth[m].rev += Number(d.value) || 0; byMonth[m].profit += (Number(d.value) || 0) - (Number(d.cost) || 0); });
+    var monthRows = Object.keys(byMonth).map(function (m) {
+      return "<tr><td>" + esc(m) + "</td><td>" + Prices.money(byMonth[m].rev) + "</td><td>" + Prices.money(byMonth[m].profit) + "</td></tr>";
+    }).join("") || '<tr><td colspan="3" class="status-text">No won deals yet.</td></tr>';
+
+    return '<div class="page-head"><div><h2>Reports &amp; P&amp;L</h2><div class="sub">Realised vs pipeline performance (values in your display currency).</div></div></div>' +
+      '<div class="stat-row">' +
+        stat(Prices.money(wonRev), "Won revenue") +
+        statDot(Prices.money(wonProfit), "Won profit", "green") +
+        stat(margin + "%", "Avg margin") +
+        stat(Prices.money(openRev), "Pipeline value") +
+        stat(Prices.money(openProfit), "Pipeline profit") +
+      "</div>" +
+      '<div class="grid cards" style="grid-template-columns:1fr 1fr;">' +
+        '<div class="card"><h3>Won by product</h3><table class="sheet"><thead><tr><th>Product</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>' + prodRows + "</tbody></table></div>" +
+        '<div class="card"><h3>Won by month</h3><table class="sheet"><thead><tr><th>Month</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>' + monthRows + "</tbody></table></div>" +
+      "</div>";
+  }
+
   /* ---- Tasks ---- */
   function viewTasks() {
     var tasks = Store.tasks().slice().sort(function (a, b) {
@@ -492,6 +560,7 @@ window.App = window.App || {};
       var li = p.linkedin ? ' <a href="' + esc(p.linkedin) + '" target="_blank" rel="noopener" title="LinkedIn">in</a>' : "";
       var thread = p.email
         ? '<span class="person-thread" data-action="person-thread" data-id="' + c.id + '" data-idx="' + idx + '" title="Open this contact\'s Gmail thread">🔎</span>' : "";
+      var wa = p.phone ? '<a class="person-wa" href="' + waUrl(p.phone) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a>' : "";
       var pst = p.status || "red";
       var lights = ["red", "yellow", "green"].map(function (st) {
         return '<button class="plight ' + st + (pst === st ? " on" : "") +
@@ -505,7 +574,7 @@ window.App = window.App || {};
         (p.phone ? '<span class="p-email">📞 ' + esc(p.phone) + "</span>" : "") +
         '<span class="p-actions">' +
           '<span class="plights">' + lights + "</span>" +
-          mail + thread + li +
+          mail + thread + wa + li +
           '<span class="person-del" data-action="del-person" data-id="' + c.id + '" data-idx="' + idx + '" title="Remove">✕</span>' +
         "</span></div>";
     }).join("");
@@ -534,6 +603,7 @@ window.App = window.App || {};
       "</div>" +
       '<div class="card-actions">' +
         '<button class="btn primary sm" data-action="send-email" data-id="' + c.id + '">✉️ Send email</button>' +
+        (c.phone ? '<a class="btn sm wa" href="' + waUrl(c.phone) + '" target="_blank" rel="noopener">💬 WhatsApp</a>' : "") +
         '<button class="btn sm" data-action="make-offer" data-id="' + c.id + '">💰 Offer</button>' +
         '<button class="btn sm" data-action="make-docs" data-id="' + c.id + '">📄 Docs</button>' +
         '<button class="btn sm" data-action="find-buyers" data-id="' + c.id + '">👥 More contacts</button>' +
@@ -731,12 +801,24 @@ window.App = window.App || {};
       return '<option value="' + esc(p.name) + '"' + (d.product === p.name ? " selected" : "") + ">" + esc(p.name) + "</option>";
     }).join("");
     var stageOpts = App.STAGES.map(function (s) { return '<option value="' + s.key + '"' + ((d.stage || "lead") === s.key ? " selected" : "") + ">" + esc(s.label) + "</option>"; }).join("");
+    var shipStatuses = ["", "Booked", "Loading", "In transit", "Arrived", "Delivered", "Delayed"];
+    var shipOpts = shipStatuses.map(function (x) { return '<option value="' + x + '"' + ((d.shipStatus || "") === x ? " selected" : "") + ">" + (x || "—") + "</option>"; }).join("");
+    function df(key, label, ph, type) {
+      return '<div class="field"><label>' + label + "</label><input " + (type ? 'type="' + type + '" ' : "") + 'data-d="' + key + '" value="' + esc(d[key] || "") + '" placeholder="' + (ph || "") + '"/></div>';
+    }
     var body =
       '<div class="field"><label>Title</label><input data-d="title" value="' + esc(d.title || "") + '" placeholder="e.g. 200 MT copper cathode → Aurubis"/></div>' +
       '<div class="field-2"><div class="field"><label>Buyer</label><select data-d="buyerId">' + buyerOpts + "</select></div>" +
         '<div class="field"><label>Product</label><select data-d="product">' + prodOpts + "</select></div></div>" +
       '<div class="field-2"><div class="field"><label>Stage</label><select data-d="stage">' + stageOpts + "</select></div>" +
-        '<div class="field"><label>Value (USD)</label><input type="number" data-d="value" value="' + esc(d.value || "") + '" placeholder="estimated deal value"/></div></div>' +
+        df("value", "Revenue / value (USD)", "what you sell it for", "number") + "</div>" +
+      '<div class="field-2">' + df("cost", "Your cost (USD)", "for P&L profit", "number") +
+        df("eta", "ETA", "", "date") + "</div>" +
+      '<div class="meta" style="margin:2px 0 8px;">🚢 Logistics (shows in the Shipments tab)</div>' +
+      '<div class="field-2">' + df("bl", "B/L number", "") + df("container", "Container(s)", "") + "</div>" +
+      '<div class="field-2">' + df("vessel", "Vessel", "") +
+        '<div class="field"><label>Shipment status</label><select data-d="shipStatus">' + shipOpts + "</select></div></div>" +
+      '<div class="field-2">' + df("loadPort", "Load port", "") + df("dischargePort", "Discharge port", "") + "</div>" +
       '<div class="field"><label>Notes</label><textarea data-d="notes">' + esc(d.notes || "") + "</textarea></div>";
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
       '<button class="btn primary" data-action="save-deal" data-id="' + (d.id || "") + '">Save deal</button>';
@@ -1658,6 +1740,7 @@ window.App = window.App || {};
     App.Store.updateSheetContact(catId, contactId, patch);
   };
   App.onDealStage = function (id, stage) { Store.updateDeal(id, { stage: stage }); render(); };
+  App.onShip = function (id, field, value) { var p = {}; p[field] = value; Store.updateDeal(id, p); };
   App.onTaskDone = function (id, done) { Store.updateTask(id, { done: done }); render(); };
   App.onTaskEdit = function (id, field, value) { var p = {}; p[field] = value; Store.updateTask(id, p); };
 
