@@ -42,7 +42,9 @@ window.App = window.App || {};
     docTemplates: {},           // { sco, icpo, ncnda, contract } custom trade-doc bodies
     autoBackup: true,           // keep a daily local snapshot for one-click restore
     autoFollowupTask: true,     // auto-create a follow-up task when you email a buyer
-    trackEmails: false          // append a tracked link to outgoing emails (needs public proxy)
+    trackEmails: false,         // append a tracked link to outgoing emails (needs public proxy)
+    invoicePrefix: "INV-",      // invoice number prefix
+    invoiceSeq: 1               // next invoice sequence number
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -114,7 +116,10 @@ window.App = window.App || {};
       deals: [],
       tasks: [],
       customProducts: [],
-      priceAlerts: []
+      priceAlerts: [],
+      contracts: [],
+      invoices: [],
+      hedges: []
     };
   }
 
@@ -138,6 +143,9 @@ window.App = window.App || {};
     if (!Array.isArray(s.tasks)) s.tasks = [];
     if (!Array.isArray(s.customProducts)) s.customProducts = [];
     if (!Array.isArray(s.priceAlerts)) s.priceAlerts = [];
+    if (!Array.isArray(s.contracts)) s.contracts = [];
+    if (!Array.isArray(s.invoices)) s.invoices = [];
+    if (!Array.isArray(s.hedges)) s.hedges = [];
     if (!s.prices.fxRates || typeof s.prices.fxRates !== "object") s.prices.fxRates = {};
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
@@ -200,7 +208,8 @@ window.App = window.App || {};
       var c = Object.assign({
         id: uid(), name: "", country: "DE", city: "", website: "",
         contactName: "", email: "", phone: "", materials: [], people: [],
-        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null, notes: "", activity: []
+        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null, notes: "", activity: [],
+        kycStatus: "none", creditLimit: "", registrationNo: "", vat: "", sanctionsFlag: ""
       }, data || {});
       load().companies.push(c);
       save();
@@ -499,6 +508,48 @@ window.App = window.App || {};
     },
     deleteCustomProduct: function (id) { var s = load(); s.customProducts = (s.customProducts || []).filter(function (x) { return x.id !== id; }); save(); },
     priceAlerts: function () { var s = load(); if (!Array.isArray(s.priceAlerts)) s.priceAlerts = []; return s.priceAlerts; },
+
+    /* ---------- Contracts (QP / formula pricing) ---------- */
+    contracts: function () { var s = load(); if (!Array.isArray(s.contracts)) s.contracts = []; return s.contracts; },
+    addContract: function (data) {
+      var s = load(); if (!Array.isArray(s.contracts)) s.contracts = [];
+      var c = Object.assign({
+        id: uid(), buyerId: "", product: "", metal: "copper", qtyMt: "", tolerancePct: 10,
+        priceBasis: "LME cash", qpDesc: "Average LME over month of shipment", qpAvg: "",
+        premium: "", marginPct: "", provisionalPct: 90, incoterm: "CIF", port: "",
+        side: "sell", status: "draft", notes: "", createdAt: Date.now()
+      }, data || {});
+      s.contracts.push(c); save(); return c;
+    },
+    updateContract: function (id, patch) { var c = this.contracts().find(function (x) { return x.id === id; }); if (c) { Object.assign(c, patch); save(); } },
+    deleteContract: function (id) { var s = load(); s.contracts = (s.contracts || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Invoices + payments/LC ---------- */
+    invoices: function () { var s = load(); if (!Array.isArray(s.invoices)) s.invoices = []; return s.invoices; },
+    nextInvoiceNo: function () { var s = load(); return (s.settings.invoicePrefix || "INV-") + String(s.settings.invoiceSeq || 1).padStart(4, "0"); },
+    addInvoice: function (data) {
+      var s = load(); if (!Array.isArray(s.invoices)) s.invoices = [];
+      var inv = Object.assign({
+        id: uid(), number: this.nextInvoiceNo(), buyerId: "", contractId: "", type: "commercial",
+        date: new Date().toISOString().slice(0, 10), dueDate: "", lines: [], currency: "USD",
+        status: "draft", paidAmount: 0, paidDate: "", lcRef: "", lcBank: "", lcExpiry: "", notes: ""
+      }, data || {});
+      s.invoices.push(inv);
+      s.settings.invoiceSeq = (s.settings.invoiceSeq || 1) + 1;
+      save(); return inv;
+    },
+    updateInvoice: function (id, patch) { var i = this.invoices().find(function (x) { return x.id === id; }); if (i) { Object.assign(i, patch); save(); } },
+    deleteInvoice: function (id) { var s = load(); s.invoices = (s.invoices || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Hedges (LME positions) ---------- */
+    hedges: function () { var s = load(); if (!Array.isArray(s.hedges)) s.hedges = []; return s.hedges; },
+    addHedge: function (data) {
+      var s = load(); if (!Array.isArray(s.hedges)) s.hedges = [];
+      var h = Object.assign({ id: uid(), metal: "copper", side: "sell", qtyMt: "", price: "", date: new Date().toISOString().slice(0, 10), notes: "" }, data || {});
+      s.hedges.push(h); save(); return h;
+    },
+    updateHedge: function (id, patch) { var h = this.hedges().find(function (x) { return x.id === id; }); if (h) { Object.assign(h, patch); save(); } },
+    deleteHedge: function (id) { var s = load(); s.hedges = (s.hedges || []).filter(function (x) { return x.id !== id; }); save(); },
 
     /* ---------- Local backup snapshots ---------- */
     takeSnapshot: function () {

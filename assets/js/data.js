@@ -8,7 +8,7 @@ window.App = window.App || {};
   "use strict";
 
   // Bump on each release; shown in the sidebar so you can confirm the live build.
-  App.VERSION = "build 11 · metalflow";
+  App.VERSION = "build 12 · metalflow";
 
   /* ---- Metal groups: drive colour coding + LME price linkage ---- */
   // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
@@ -156,5 +156,18 @@ window.App = window.App || {};
     { key: "lost",        label: "Lost",         color: "#e5484d" }
   ];
   App.stageLabel = function (k) { var s = App.STAGES.find(function (x) { return x.key === k; }); return s ? s.label : k; };
+
+  /* Basic sanctions/compliance screen list (INDICATIVE ONLY — not a substitute
+     for a real OFAC/EU/UK SDN screening service). Matches buyer name/country
+     against sanctioned jurisdictions and a few high-risk keywords. */
+  App.SANCTIONS_KEYWORDS = [
+    "russia", "russian", "belarus", "north korea", "dprk", "iran", "iranian",
+    "syria", "syrian", "crimea", "donetsk", "luhansk", "myanmar", "cuba",
+    "rusal", "norilsk", "nornickel", "sberbank", "vtb", "gazprom", "rosneft"
+  ];
+  App.screenSanctions = function (text) {
+    var t = (" " + (text || "") + " ").toLowerCase();
+    return App.SANCTIONS_KEYWORDS.filter(function (kw) { return t.indexOf(kw) !== -1; });
+  };
 
 })(window.App);

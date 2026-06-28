@@ -411,6 +411,29 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 /* ---------- Email opens badge ---------- */
 .opens-badge { background: #243a52; color: #9fd0ff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
 
+
+/* ---------- Invoice / status badges (contracts, invoices, compliance) ---------- */
+.inv-st {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  padding: 3px 9px; border-radius: 999px; text-transform: capitalize;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+}
+.inv-st.draft { background: #232c38; color: #aab8c8; border-color: #38465a; }
+.inv-st.proforma { background: #1f2a3a; color: #9fc2ef; border-color: #34507a; }
+.inv-st.commercial { background: #243a52; color: #9fd0ff; border-color: #356089; }
+.inv-st.provisional { background: #2c2a1a; color: #e8d4b0; border-color: #6b5a30; }
+.inv-st.final { background: #1d2c1f; color: #bfe6cc; border-color: #2f6b43; }
+.inv-st.partial { background: #2c241a; color: #f0cf95; border-color: #6b5330; }
+.inv-st.paid { background: #18301f; color: #5fd699; border-color: #2f6b43; }
+.inv-st.overdue { background: #321a1c; color: #f3878b; border-color: #7a3438; animation: pulse 1.8s infinite; }
+
+/* Inline inputs/selects inside data sheets stay compact */
+.sheet td select, .sheet td input {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 5px 7px; font-size: 12.5px; font-family: inherit; max-width: 130px;
+}
+.sheet td select:focus, .sheet td input:focus { outline: none; border-color: var(--accent, #4a90d9); }
+
 </style>
 </head>
 <body>
@@ -450,7 +473,7 @@ window.App = window.App || {};
   "use strict";
 
   // Bump on each release; shown in the sidebar so you can confirm the live build.
-  App.VERSION = "build 11 · metalflow";
+  App.VERSION = "build 12 · metalflow";
 
   /* ---- Metal groups: drive colour coding + LME price linkage ---- */
   // lmeKey maps a metal to a row in the price panel. null = no direct LME contract.
@@ -598,6 +621,19 @@ window.App = window.App || {};
     { key: "lost",        label: "Lost",         color: "#e5484d" }
   ];
   App.stageLabel = function (k) { var s = App.STAGES.find(function (x) { return x.key === k; }); return s ? s.label : k; };
+
+  /* Basic sanctions/compliance screen list (INDICATIVE ONLY — not a substitute
+     for a real OFAC/EU/UK SDN screening service). Matches buyer name/country
+     against sanctioned jurisdictions and a few high-risk keywords. */
+  App.SANCTIONS_KEYWORDS = [
+    "russia", "russian", "belarus", "north korea", "dprk", "iran", "iranian",
+    "syria", "syrian", "crimea", "donetsk", "luhansk", "myanmar", "cuba",
+    "rusal", "norilsk", "nornickel", "sberbank", "vtb", "gazprom", "rosneft"
+  ];
+  App.screenSanctions = function (text) {
+    var t = (" " + (text || "") + " ").toLowerCase();
+    return App.SANCTIONS_KEYWORDS.filter(function (kw) { return t.indexOf(kw) !== -1; });
+  };
 
 })(window.App);
 
@@ -805,7 +841,9 @@ window.App = window.App || {};
     docTemplates: {},           // { sco, icpo, ncnda, contract } custom trade-doc bodies
     autoBackup: true,           // keep a daily local snapshot for one-click restore
     autoFollowupTask: true,     // auto-create a follow-up task when you email a buyer
-    trackEmails: false          // append a tracked link to outgoing emails (needs public proxy)
+    trackEmails: false,         // append a tracked link to outgoing emails (needs public proxy)
+    invoicePrefix: "INV-",      // invoice number prefix
+    invoiceSeq: 1               // next invoice sequence number
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -877,7 +915,10 @@ window.App = window.App || {};
       deals: [],
       tasks: [],
       customProducts: [],
-      priceAlerts: []
+      priceAlerts: [],
+      contracts: [],
+      invoices: [],
+      hedges: []
     };
   }
 
@@ -901,6 +942,9 @@ window.App = window.App || {};
     if (!Array.isArray(s.tasks)) s.tasks = [];
     if (!Array.isArray(s.customProducts)) s.customProducts = [];
     if (!Array.isArray(s.priceAlerts)) s.priceAlerts = [];
+    if (!Array.isArray(s.contracts)) s.contracts = [];
+    if (!Array.isArray(s.invoices)) s.invoices = [];
+    if (!Array.isArray(s.hedges)) s.hedges = [];
     if (!s.prices.fxRates || typeof s.prices.fxRates !== "object") s.prices.fxRates = {};
     if (!Array.isArray(s.customCountries)) s.customCountries = [];
     if (!Array.isArray(s.sheet)) s.sheet = [];
@@ -963,7 +1007,8 @@ window.App = window.App || {};
       var c = Object.assign({
         id: uid(), name: "", country: "DE", city: "", website: "",
         contactName: "", email: "", phone: "", materials: [], people: [],
-        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null, notes: "", activity: []
+        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null, notes: "", activity: [],
+        kycStatus: "none", creditLimit: "", registrationNo: "", vat: "", sanctionsFlag: ""
       }, data || {});
       load().companies.push(c);
       save();
@@ -1262,6 +1307,48 @@ window.App = window.App || {};
     },
     deleteCustomProduct: function (id) { var s = load(); s.customProducts = (s.customProducts || []).filter(function (x) { return x.id !== id; }); save(); },
     priceAlerts: function () { var s = load(); if (!Array.isArray(s.priceAlerts)) s.priceAlerts = []; return s.priceAlerts; },
+
+    /* ---------- Contracts (QP / formula pricing) ---------- */
+    contracts: function () { var s = load(); if (!Array.isArray(s.contracts)) s.contracts = []; return s.contracts; },
+    addContract: function (data) {
+      var s = load(); if (!Array.isArray(s.contracts)) s.contracts = [];
+      var c = Object.assign({
+        id: uid(), buyerId: "", product: "", metal: "copper", qtyMt: "", tolerancePct: 10,
+        priceBasis: "LME cash", qpDesc: "Average LME over month of shipment", qpAvg: "",
+        premium: "", marginPct: "", provisionalPct: 90, incoterm: "CIF", port: "",
+        side: "sell", status: "draft", notes: "", createdAt: Date.now()
+      }, data || {});
+      s.contracts.push(c); save(); return c;
+    },
+    updateContract: function (id, patch) { var c = this.contracts().find(function (x) { return x.id === id; }); if (c) { Object.assign(c, patch); save(); } },
+    deleteContract: function (id) { var s = load(); s.contracts = (s.contracts || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Invoices + payments/LC ---------- */
+    invoices: function () { var s = load(); if (!Array.isArray(s.invoices)) s.invoices = []; return s.invoices; },
+    nextInvoiceNo: function () { var s = load(); return (s.settings.invoicePrefix || "INV-") + String(s.settings.invoiceSeq || 1).padStart(4, "0"); },
+    addInvoice: function (data) {
+      var s = load(); if (!Array.isArray(s.invoices)) s.invoices = [];
+      var inv = Object.assign({
+        id: uid(), number: this.nextInvoiceNo(), buyerId: "", contractId: "", type: "commercial",
+        date: new Date().toISOString().slice(0, 10), dueDate: "", lines: [], currency: "USD",
+        status: "draft", paidAmount: 0, paidDate: "", lcRef: "", lcBank: "", lcExpiry: "", notes: ""
+      }, data || {});
+      s.invoices.push(inv);
+      s.settings.invoiceSeq = (s.settings.invoiceSeq || 1) + 1;
+      save(); return inv;
+    },
+    updateInvoice: function (id, patch) { var i = this.invoices().find(function (x) { return x.id === id; }); if (i) { Object.assign(i, patch); save(); } },
+    deleteInvoice: function (id) { var s = load(); s.invoices = (s.invoices || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Hedges (LME positions) ---------- */
+    hedges: function () { var s = load(); if (!Array.isArray(s.hedges)) s.hedges = []; return s.hedges; },
+    addHedge: function (data) {
+      var s = load(); if (!Array.isArray(s.hedges)) s.hedges = [];
+      var h = Object.assign({ id: uid(), metal: "copper", side: "sell", qtyMt: "", price: "", date: new Date().toISOString().slice(0, 10), notes: "" }, data || {});
+      s.hedges.push(h); save(); return h;
+    },
+    updateHedge: function (id, patch) { var h = this.hedges().find(function (x) { return x.id === id; }); if (h) { Object.assign(h, patch); save(); } },
+    deleteHedge: function (id) { var s = load(); s.hedges = (s.hedges || []).filter(function (x) { return x.id !== id; }); save(); },
 
     /* ---------- Local backup snapshots ---------- */
     takeSnapshot: function () {
@@ -2089,6 +2176,10 @@ window.App = window.App || {};
       item("shipments", null, "🚢", "Shipments") +
       item("markets", null, "💹", "Markets") +
       item("reports", null, "📊", "Reports") +
+      item("contracts", null, "📜", "Contracts", Store.contracts().length || null) +
+      item("invoices", null, "🧾", "Invoices", Store.invoices().length || null) +
+      item("risk", null, "⚖️", "Risk / positions") +
+      item("compliance", null, "🛡️", "Compliance") +
       item("calendar", null, "🗓️", "Calendar") +
       item("tasks", null, "✅", "Tasks", (Store.tasks().filter(function (t) { return !t.done; }).length) || null) +
       item("sheet", null, "📂", "Custom sheet", Store.sheetCategories().length || null) +
@@ -2132,6 +2223,10 @@ window.App = window.App || {};
     else if (route.view === "shipments") c.innerHTML = viewShipments();
     else if (route.view === "markets") c.innerHTML = viewMarkets();
     else if (route.view === "reports") c.innerHTML = viewReports();
+    else if (route.view === "contracts") c.innerHTML = viewContracts();
+    else if (route.view === "invoices") c.innerHTML = viewInvoices();
+    else if (route.view === "risk") c.innerHTML = viewRisk();
+    else if (route.view === "compliance") c.innerHTML = viewCompliance();
     else if (route.view === "calendar") c.innerHTML = viewCalendar();
     else if (route.view === "search") c.innerHTML = viewSearch();
     else if (route.view === "tasks") c.innerHTML = viewTasks();
@@ -2495,6 +2590,137 @@ window.App = window.App || {};
         : '<div class="empty"><div class="big">🤷</div><p>No matches for “' + esc(globalQ) + '”.</p></div>');
   }
 
+  /* ---- Contracts (QP / formula pricing) ---- */
+  var PRICE_METALS = [["copper", "Copper"], ["aluminium", "Aluminium"], ["zinc", "Zinc"], ["lead", "Lead"], ["nickel", "Nickel"], ["gold", "Gold"]];
+  function metalPrice(key) { var r = Store.prices().rows[key]; return r && r.value != null ? Number(r.value) : null; }
+  function contractUnitUSD(c) {
+    var base = (c.qpAvg !== "" && c.qpAvg != null && !isNaN(c.qpAvg)) ? Number(c.qpAvg) : metalPrice(c.metal);
+    if (base == null) return null;
+    return Math.round(base * (1 + (Number(c.marginPct) || 0) / 100) + (Number(c.premium) || 0));
+  }
+  function contractValueUSD(c) { var u = contractUnitUSD(c); return u == null ? 0 : u * (Number(c.qtyMt) || 0); }
+
+  function viewContracts() {
+    var cs = Store.contracts();
+    var rows = cs.map(function (c) {
+      var buyer = c.buyerId ? Store.companyById(c.buyerId) : null;
+      var unit = contractUnitUSD(c), val = contractValueUSD(c);
+      var priced = (c.qpAvg !== "" && c.qpAvg != null);
+      return "<tr>" +
+        "<td>" + esc(buyer ? buyer.name : "—") + '<div class="status-text">' + esc(c.side) + " · " + esc(c.incoterm) + (c.port ? " " + esc(c.port) : "") + "</div></td>" +
+        "<td>" + esc(c.product || "—") + "</td>" +
+        "<td>" + esc(c.qtyMt || "0") + " MT ±" + esc(c.tolerancePct || 0) + "%</td>" +
+        '<td><div class="status-text">' + esc(c.qpDesc || "") + "</div>" + (priced ? "QP " + Prices.money(Number(c.qpAvg)) : '<span style="color:var(--yellow)">unpriced</span>') + "</td>" +
+        "<td>" + (unit == null ? "—" : Prices.money(unit) + "/MT") + "</td>" +
+        "<td>" + Prices.money(val) + '<div class="status-text">prov ' + (Number(c.provisionalPct) || 0) + "%: " + Prices.money(val * (Number(c.provisionalPct) || 0) / 100) + "</div></td>" +
+        '<td><select onchange="App.onContract(\'' + c.id + "','status',this.value)\">" + ["draft", "active", "priced", "closed", "cancelled"].map(function (st) { return '<option value="' + st + '"' + (c.status === st ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></td>" +
+        '<td><button class="btn sm" data-action="contract-invoice" data-id="' + c.id + '" title="Create provisional invoice">🧾</button>' +
+          '<button class="btn sm" data-action="edit-contract" data-id="' + c.id + '">✎</button>' +
+          '<button class="btn sm danger" data-action="del-contract" data-id="' + c.id + '">🗑</button></td>" +
+        "</tr>";
+    }).join("");
+    var totVal = cs.reduce(function (a, c) { return a + contractValueUSD(c); }, 0);
+    return '<div class="page-head"><div><h2>Contracts</h2><div class="sub">Formula/QP pricing · total book ' + Prices.money(totVal) + "</div></div>" +
+      '<div class="spacer"></div><button class="btn primary" data-action="add-contract">+ New contract</button></div>' +
+      (cs.length ? '<table class="sheet"><thead><tr><th>Counterparty</th><th>Product</th><th>Qty</th><th>QP / pricing</th><th>Unit</th><th>Value</th><th>Status</th><th></th></tr></thead><tbody>' + rows + "</tbody></table>"
+        : '<div class="empty"><div class="big">📜</div><p>No contracts yet. A contract captures quantity, tolerance and the QP/formula price (e.g. average LME over month of shipment + premium).</p></div>');
+  }
+
+  /* ---- Invoices + LC / payments ---- */
+  function invoiceTotal(inv) { return (inv.lines || []).reduce(function (a, l) { return a + (Number(l.amount) || 0); }, 0); }
+  function viewInvoices() {
+    var inv = Store.invoices();
+    var now = Date.now();
+    function isOverdue(i) { return i.status !== "paid" && i.dueDate && new Date(i.dueDate).getTime() < now; }
+    var outstanding = inv.filter(function (i) { return i.status !== "paid"; }).reduce(function (a, i) { return a + (invoiceTotal(i) - (Number(i.paidAmount) || 0)); }, 0);
+    var overdue = inv.filter(isOverdue).reduce(function (a, i) { return a + (invoiceTotal(i) - (Number(i.paidAmount) || 0)); }, 0);
+    var paid = inv.filter(function (i) { return i.status === "paid"; }).reduce(function (a, i) { return a + invoiceTotal(i); }, 0);
+    var lcSoon = inv.filter(function (i) { return i.lcExpiry && new Date(i.lcExpiry).getTime() < now + 14 * 86400000 && i.status !== "paid"; });
+    var rows = inv.map(function (i) {
+      var buyer = i.buyerId ? Store.companyById(i.buyerId) : null;
+      var t = invoiceTotal(i);
+      return "<tr>" +
+        "<td>" + esc(i.number) + '<div class="status-text">' + esc(i.type) + "</div></td>" +
+        "<td>" + esc(buyer ? buyer.name : "—") + "</td>" +
+        "<td>" + esc(i.date) + '<div class="status-text">due ' + esc(i.dueDate || "—") + "</div></td>" +
+        "<td>" + Prices.money(t) + "</td>" +
+        "<td>" + (i.lcRef ? "LC " + esc(i.lcRef) + '<div class="status-text">' + esc(i.lcBank || "") + (i.lcExpiry ? " · exp " + esc(i.lcExpiry) : "") + "</div>" : "—") + "</td>" +
+        '<td><span class="inv-st ' + (isOverdue(i) ? "overdue" : i.status) + '">' + (isOverdue(i) ? "overdue" : i.status) + "</span></td>" +
+        '<td>' + (i.status !== "paid" ? '<button class="btn sm primary" data-action="invoice-paid" data-id="' + i.id + '">Mark paid</button>' : "✓") +
+          '<button class="btn sm" data-action="invoice-print" data-id="' + i.id + '">🖨</button>' +
+          '<button class="btn sm" data-action="edit-invoice" data-id="' + i.id + '">✎</button>' +
+          '<button class="btn sm danger" data-action="del-invoice" data-id="' + i.id + '">🗑</button></td>" +
+        "</tr>";
+    }).join("");
+    var lcWarn = lcSoon.length ? '<div class="notice warn">⏳ ' + lcSoon.length + " open invoice(s) have an LC expiring within 14 days.</div>" : "";
+    return '<div class="page-head"><div><h2>Invoices</h2><div class="sub">Proforma → commercial → provisional/final, with LC &amp; payment tracking.</div></div>' +
+      '<div class="spacer"></div><button class="btn primary" data-action="add-invoice">+ New invoice</button></div>' + lcWarn +
+      '<div class="stat-row">' + statDot(Prices.money(outstanding), "Outstanding", "yellow") + statDot(Prices.money(overdue), "Overdue", "red") + stat(Prices.money(paid), "Paid") + "</div>" +
+      (inv.length ? '<table class="sheet"><thead><tr><th>Invoice</th><th>Buyer</th><th>Date</th><th>Total</th><th>LC</th><th>Status</th><th></th></tr></thead><tbody>' + rows + "</tbody></table>"
+        : '<div class="empty"><div class="big">🧾</div><p>No invoices yet. Create one, or generate a provisional invoice from a contract (🧾).</p></div>');
+  }
+
+  /* ---- Risk / positions + MTM ---- */
+  function viewRisk() {
+    var cs = Store.contracts().filter(function (c) { return c.status !== "cancelled"; });
+    var hs = Store.hedges();
+    var metals = {};
+    function bucket(k) { return metals[k] = metals[k] || { phys: 0, hedge: 0, mtm: 0, unpriced: 0 }; }
+    cs.forEach(function (c) {
+      var sign = c.side === "buy" ? 1 : -1, qty = Number(c.qtyMt) || 0, u = contractUnitUSD(c), cur = metalPrice(c.metal);
+      var b = bucket(c.metal); b.phys += sign * qty;
+      if (u != null && cur != null) b.mtm += sign * (cur - u) * qty;
+      if (c.qpAvg === "" || c.qpAvg == null) b.unpriced += qty;
+    });
+    hs.forEach(function (h) {
+      var sign = h.side === "buy" ? 1 : -1, qty = Number(h.qtyMt) || 0, pr = Number(h.price) || 0, cur = metalPrice(h.metal);
+      var b = bucket(h.metal); b.hedge += sign * qty;
+      if (cur != null) b.mtm += sign * (cur - pr) * qty;
+    });
+    var rows = Object.keys(metals).map(function (k) {
+      var b = metals[k]; var net = b.phys + b.hedge;
+      var lbl = (PRICE_METALS.find(function (m) { return m[0] === k; }) || [k, k])[1];
+      return "<tr><td>" + esc(lbl) + "</td><td>" + b.phys.toLocaleString() + " MT</td><td>" + b.hedge.toLocaleString() + " MT</td>" +
+        '<td' + (Math.abs(net) > 0 ? ' style="color:var(--yellow);font-weight:700"' : "") + ">" + net.toLocaleString() + " MT</td>" +
+        "<td>" + (b.unpriced ? b.unpriced.toLocaleString() + " MT" : "—") + "</td>" +
+        '<td style="color:' + (b.mtm >= 0 ? "var(--green)" : "var(--red)") + '">' + Prices.money(b.mtm) + "</td></tr>";
+    }).join("") || '<tr><td colspan="6" class="status-text">No contracts/hedges yet.</td></tr>';
+    var hedgeRows = hs.map(function (h) {
+      return "<tr><td>" + esc((PRICE_METALS.find(function (m) { return m[0] === h.metal; }) || [h.metal, h.metal])[1]) + "</td>" +
+        '<td><select onchange="App.onHedge(\'' + h.id + "','side',this.value)\">" + ["buy", "sell"].map(function (sd) { return '<option' + (h.side === sd ? " selected" : "") + ">" + sd + "</option>"; }).join("") + "</select></td>" +
+        '<td><input value="' + esc(h.qtyMt) + '" onchange="App.onHedge(\'' + h.id + '\',\'qtyMt\',this.value)"/></td>' +
+        '<td><input value="' + esc(h.price) + '" onchange="App.onHedge(\'' + h.id + '\',\'price\',this.value)"/></td>' +
+        '<td><button class="btn sm danger" data-action="del-hedge" data-id="' + h.id + '">🗑</button></td></tr>";
+    }).join("");
+    var totMtm = Object.keys(metals).reduce(function (a, k) { return a + metals[k].mtm; }, 0);
+    return '<div class="page-head"><div><h2>Risk / positions</h2><div class="sub">Net physical vs hedge exposure and mark-to-market (indicative, at current prices).</div></div>' +
+      '<div class="spacer"></div><span class="stat" style="padding:8px 14px">Total MTM: <strong style="color:' + (totMtm >= 0 ? "var(--green)" : "var(--red)") + '">' + Prices.money(totMtm) + "</strong></span></div>" +
+      '<table class="sheet"><thead><tr><th>Metal</th><th>Physical net</th><th>Hedge net</th><th>Net exposure</th><th>Unpriced</th><th>MTM</th></tr></thead><tbody>' + rows + "</tbody></table>" +
+      '<div class="page-head" style="margin-top:18px"><div><h3>LME hedges</h3></div><div class="spacer"></div><button class="btn" data-action="add-hedge">+ Add hedge</button></div>' +
+      (hs.length ? '<table class="sheet"><thead><tr><th>Metal</th><th>Side</th><th>Qty (MT)</th><th>Price USD/MT</th><th></th></tr></thead><tbody>' + hedgeRows + "</tbody></table>" : '<div class="status-text">No hedges recorded.</div>');
+  }
+
+  /* ---- Compliance: KYC + sanctions ---- */
+  function viewCompliance() {
+    var companies = Store.companies();
+    var inv = Store.invoices();
+    function outstandingFor(id) { return inv.filter(function (i) { return i.buyerId === id && i.status !== "paid"; }).reduce(function (a, i) { return a + (invoiceTotal(i) - (Number(i.paidAmount) || 0)); }, 0); }
+    var kycOpts = ["none", "pending", "approved", "rejected"];
+    var rows = companies.map(function (c) {
+      var out = outstandingFor(c.id), lim = Number(c.creditLimit) || 0;
+      var over = lim > 0 && out > lim;
+      return "<tr><td>" + esc(c.name) + '<div class="status-text">' + esc((App.countryByCode(c.country) || {}).name || "") + "</div></td>" +
+        '<td><select onchange="App.onKyc(\'' + c.id + "','kycStatus',this.value)\">" + kycOpts.map(function (k) { return '<option' + (c.kycStatus === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></td>" +
+        '<td><input value="' + esc(c.creditLimit || "") + '" placeholder="limit USD" onchange="App.onKyc(\'' + c.id + '\',\'creditLimit\',this.value)"/></td>' +
+        '<td' + (over ? ' style="color:var(--red);font-weight:700"' : "") + ">" + Prices.money(out) + (over ? " ⚠️" : "") + "</td>" +
+        "<td>" + (c.sanctionsFlag ? '<span class="inv-st overdue">⚠ ' + esc(c.sanctionsFlag) + "</span>" : '<span class="status-text">clear</span>') + "</td></tr>";
+    }).join("");
+    return '<div class="page-head"><div><h2>Compliance</h2><div class="sub">KYC status, credit limits vs exposure, and sanctions screening.</div></div>' +
+      '<div class="spacer"></div><button class="btn primary" data-action="screen-all">🛡️ Screen all</button></div>' +
+      '<div class="notice warn">⚠️ Sanctions screening here is an <strong>indicative keyword check</strong> only — not a substitute for a real OFAC/EU/UK SDN screening service before contracting.</div>' +
+      '<table class="sheet"><thead><tr><th>Counterparty</th><th>KYC</th><th>Credit limit</th><th>Outstanding</th><th>Sanctions</th></tr></thead><tbody>' + rows + "</tbody></table>";
+  }
+
   /* ---- Tasks ---- */
   function viewTasks() {
     var tasks = Store.tasks().slice().sort(function (a, b) {
@@ -2848,6 +3074,11 @@ window.App = window.App || {};
       '<div class="field-2">' + fld("contactName", "Contact person", "Procurement") + fld("email", "Email", "buyer@company.com") + "</div>" +
       '<div class="field-2">' + fld("phone", "Phone", "+49 …") + fld("website", "Website", "company.com") + "</div>" +
       '<div class="field"><label>Materials they buy from you</label><div class="checks">' + checks + "</div></div>" +
+      '<div class="field-2"><div class="field"><label>KYC status</label><select data-f="kycStatus">' +
+        ["none", "pending", "approved", "rejected"].map(function (k) { return '<option value="' + k + '"' + ((c.kycStatus || "none") === k ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></div>" +
+        '<div class="field"><label>Credit limit (USD)</label><input data-f="creditLimit" value="' + esc(c.creditLimit || "") + '"/></div></div>' +
+      '<div class="field-2"><div class="field"><label>Company reg. no.</label><input data-f="registrationNo" value="' + esc(c.registrationNo || "") + '"/></div>' +
+        '<div class="field"><label>VAT / tax no.</label><input data-f="vat" value="' + esc(c.vat || "") + '"/></div></div>' +
       '<div class="field"><label>Notes</label><textarea data-f="notes" placeholder="Volumes, terms, history…">' + esc(c.notes || "") + "</textarea></div>" +
       ((isEdit && c.activity && c.activity.length)
         ? '<div class="field"><label>Activity timeline</label><div class="timeline">' +
@@ -2885,6 +3116,55 @@ window.App = window.App || {};
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
       '<button class="btn primary" data-action="save-product">Add product</button>';
     openModal("Add product", body, footer);
+  }
+
+  function contractForm(c) {
+    c = c || {};
+    var buyerOpts = '<option value="">— counterparty —</option>' + Store.companies().map(function (x) {
+      return '<option value="' + x.id + '"' + (c.buyerId === x.id ? " selected" : "") + ">" + esc(x.name) + "</option>";
+    }).join("");
+    var prodOpts = '<option value="">— product —</option>' + App.allProducts().map(function (x) {
+      return '<option value="' + esc(x.name) + '"' + (c.product === x.name ? " selected" : "") + ">" + esc(x.name) + "</option>";
+    }).join("");
+    var metalOpts = PRICE_METALS.map(function (m) { return '<option value="' + m[0] + '"' + ((c.metal || "copper") === m[0] ? " selected" : "") + ">" + m[1] + "</option>"; }).join("");
+    function f(k, label, ph, type) { return '<div class="field"><label>' + label + "</label><input " + (type ? 'type="' + type + '" ' : "") + 'data-c="' + k + '" value="' + esc(c[k] != null ? c[k] : "") + '" placeholder="' + (ph || "") + '"/></div>'; }
+    var body =
+      '<div class="field-2"><div class="field"><label>Counterparty</label><select data-c="buyerId">' + buyerOpts + "</select></div>" +
+        '<div class="field"><label>Side</label><select data-c="side">' + ["sell", "buy"].map(function (s2) { return '<option' + (c.side === s2 ? " selected" : "") + ">" + s2 + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="field-2"><div class="field"><label>Product</label><select data-c="product">' + prodOpts + "</select></div>" +
+        '<div class="field"><label>Price metal (LME)</label><select data-c="metal">' + metalOpts + "</select></div></div>" +
+      '<div class="field-2">' + f("qtyMt", "Quantity (MT)", "", "number") + f("tolerancePct", "Tolerance %", "10", "number") + "</div>" +
+      '<div class="field"><label>QP / pricing basis</label><input data-c="qpDesc" value="' + esc(c.qpDesc || "Average LME cash over month of shipment") + '"/></div>' +
+      '<div class="field-2">' + f("premium", "Premium USD/MT", "", "number") + f("marginPct", "Margin %", "", "number") + "</div>" +
+      '<div class="field-2">' + f("qpAvg", "QP avg price USD/MT (when known)", "blank = use live", "number") + f("provisionalPct", "Provisional %", "90", "number") + "</div>" +
+      '<div class="field-2">' + f("incoterm", "Incoterm", "CIF") + f("port", "Port", "") + "</div>" +
+      '<div class="field"><label>Notes</label><textarea data-c="notes">' + esc(c.notes || "") + "</textarea></div>";
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="save-contract" data-id="' + (c.id || "") + '">Save contract</button>';
+    openModal(c.id ? "Edit contract" : "New contract", body, footer);
+  }
+
+  function invoiceForm(inv) {
+    inv = inv || {};
+    var buyerOpts = '<option value="">— buyer —</option>' + Store.companies().map(function (x) {
+      return '<option value="' + x.id + '"' + (inv.buyerId === x.id ? " selected" : "") + ">" + esc(x.name) + "</option>";
+    }).join("");
+    var lines = inv.lines && inv.lines.length ? inv.lines : [{ desc: "", amount: "" }];
+    var lineRows = lines.map(function (l, i) {
+      return '<div class="field-2" data-line="' + i + '"><div class="field"><input data-il="desc" value="' + esc(l.desc || "") + '" placeholder="description"/></div>' +
+        '<div class="field"><input data-il="amount" type="number" value="' + esc(l.amount != null ? l.amount : "") + '" placeholder="amount"/></div></div>';
+    }).join("");
+    function f(k, label, type) { return '<div class="field"><label>' + label + "</label><input " + (type ? 'type="' + type + '" ' : "") + 'data-iv="' + k + '" value="' + esc(inv[k] != null ? inv[k] : "") + '"/></div>'; }
+    var body =
+      '<div class="field-2"><div class="field"><label>Buyer</label><select data-iv="buyerId">' + buyerOpts + "</select></div>" +
+        '<div class="field"><label>Type</label><select data-iv="type">' + ["proforma", "commercial", "provisional", "final"].map(function (t) { return '<option' + (inv.type === t ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="field-2">' + f("date", "Date", "date") + f("dueDate", "Due date", "date") + "</div>" +
+      '<div class="meta">Line items</div><div id="inv-lines">' + lineRows + "</div>" +
+      '<button class="btn sm" data-action="inv-add-line">+ Line</button>' +
+      '<div class="meta" style="margin-top:10px">Letter of Credit (optional)</div>' +
+      '<div class="field-2">' + f("lcRef", "LC reference") + f("lcBank", "LC bank") + "</div>" +
+      '<div class="field">' + '<label>LC expiry</label><input type="date" data-iv="lcExpiry" value="' + esc(inv.lcExpiry || "") + '"/></div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="save-invoice" data-id="' + (inv.id || "") + '">Save invoice</button>';
+    openModal(inv.id ? "Edit invoice " + esc(inv.number || "") : "New invoice", body, footer);
   }
 
   function dealForm(d) {
@@ -3416,6 +3696,86 @@ window.App = window.App || {};
 
       case "sheet-add-cat": Store.addSheetCategory("New category"); render(); break;
       case "add-deal": dealForm(); break;
+      case "add-contract": contractForm(); break;
+      case "edit-contract": contractForm(Store.contracts().find(function (x) { return x.id === id; })); break;
+      case "del-contract": if (confirm("Delete this contract?")) { Store.deleteContract(id); render(); } break;
+      case "save-contract": {
+        var cm = a.closest(".modal"); var data = {};
+        cm.querySelectorAll("[data-c]").forEach(function (el) { data[el.getAttribute("data-c")] = el.value; });
+        if (id) Store.updateContract(id, data); else Store.addContract(data);
+        closeModal(); render(); toast(id ? "Contract updated." : "Contract added.");
+        break;
+      }
+      case "contract-invoice": {
+        var ct = Store.contracts().find(function (x) { return x.id === id; });
+        if (!ct) break;
+        var val = contractValueUSD(ct), prov = val * (Number(ct.provisionalPct) || 100) / 100;
+        var d = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+        Store.addInvoice({ buyerId: ct.buyerId, contractId: ct.id, type: "provisional", dueDate: d,
+          lines: [{ desc: (ct.product || "Material") + " — " + (ct.qtyMt || 0) + " MT (provisional " + (ct.provisionalPct || 100) + "%)", amount: Math.round(prov) }] });
+        route = { view: "invoices", country: null }; render(); toast("Provisional invoice created.");
+        break;
+      }
+
+      case "add-invoice": invoiceForm(); break;
+      case "edit-invoice": invoiceForm(Store.invoices().find(function (x) { return x.id === id; })); break;
+      case "del-invoice": if (confirm("Delete this invoice?")) { Store.deleteInvoice(id); render(); } break;
+      case "invoice-paid": {
+        var iv = Store.invoices().find(function (x) { return x.id === id; });
+        if (iv) { Store.updateInvoice(id, { status: "paid", paidAmount: invoiceTotal(iv), paidDate: new Date().toISOString().slice(0, 10) }); render(); toast("Invoice marked paid."); }
+        break;
+      }
+      case "inv-add-line": {
+        var lc = a.closest(".modal").querySelector("#inv-lines");
+        var n = lc.querySelectorAll("[data-line]").length;
+        var div = document.createElement("div"); div.className = "field-2"; div.setAttribute("data-line", n);
+        div.innerHTML = '<div class="field"><input data-il="desc" placeholder="description"/></div><div class="field"><input data-il="amount" type="number" placeholder="amount"/></div>';
+        lc.appendChild(div);
+        break;
+      }
+      case "save-invoice": {
+        var im = a.closest(".modal"); var data = {};
+        im.querySelectorAll("[data-iv]").forEach(function (el) { data[el.getAttribute("data-iv")] = el.value; });
+        var lines = [];
+        im.querySelectorAll("#inv-lines [data-line]").forEach(function (row) {
+          var desc = row.querySelector('[data-il="desc"]').value, amount = row.querySelector('[data-il="amount"]').value;
+          if (desc || amount) lines.push({ desc: desc, amount: Number(amount) || 0 });
+        });
+        data.lines = lines;
+        if (id) Store.updateInvoice(id, data); else Store.addInvoice(data);
+        closeModal(); render(); toast(id ? "Invoice updated." : "Invoice created.");
+        break;
+      }
+      case "invoice-print": {
+        var pin = Store.invoices().find(function (x) { return x.id === id; }); if (!pin) break;
+        var pb = pin.buyerId ? Store.companyById(pin.buyerId) : null; var ps3 = Store.settings();
+        var w3 = window.open("", "_blank"); if (!w3) { toast("Allow pop-ups to print."); break; }
+        var lr = (pin.lines || []).map(function (l) { return "<tr><td>" + esc(l.desc) + "</td><td style='text-align:right'>" + Prices.money(Number(l.amount) || 0) + "</td></tr>"; }).join("");
+        w3.document.write("<html><head><title>" + esc(pin.number) + "</title><style>body{font-family:Arial;max-width:720px;margin:32px auto;color:#111}table{width:100%;border-collapse:collapse;margin:14px 0}td,th{border-bottom:1px solid #ddd;padding:8px;text-align:left}.r{text-align:right}.muted{color:#666;font-size:13px}</style></head><body>" +
+          "<h1>" + esc(ps3.companyName || "") + "</h1><div class='muted'>" + esc(ps3.senderEmail || "") + (ps3.phone ? " · " + esc(ps3.phone) : "") + "</div>" +
+          "<h2>" + esc(pin.type.toUpperCase()) + " INVOICE " + esc(pin.number) + "</h2>" +
+          "<p><strong>To:</strong> " + esc(pb ? pb.name : "") + "<br><strong>Date:</strong> " + esc(pin.date) + " · <strong>Due:</strong> " + esc(pin.dueDate || "—") +
+          (pin.lcRef ? "<br><strong>LC:</strong> " + esc(pin.lcRef) + " " + esc(pin.lcBank || "") : "") + "</p>" +
+          "<table><thead><tr><th>Description</th><th class='r'>Amount</th></tr></thead><tbody>" + lr +
+          "<tr><td class='r'><strong>Total</strong></td><td class='r'><strong>" + Prices.money(invoiceTotal(pin)) + "</strong></td></tr></tbody></table>" +
+          "</body></html>");
+        w3.document.close(); w3.focus(); setTimeout(function () { w3.print(); }, 300);
+        break;
+      }
+
+      case "add-hedge": Store.addHedge(); render(); break;
+      case "del-hedge": Store.deleteHedge(id); render(); break;
+
+      case "screen-all": {
+        var flagged = 0;
+        Store.companies().forEach(function (c) {
+          var hits = App.screenSanctions(c.name + " " + ((App.countryByCode(c.country) || {}).name || ""));
+          Store.updateCompany(c.id, { sanctionsFlag: hits.length ? hits.join(", ") : "" });
+          if (hits.length) flagged++;
+        });
+        render(); toast(flagged ? (flagged + " counterparties flagged — review before contracting.") : "No matches in the indicative screen.");
+        break;
+      }
       case "add-product": productForm(); break;
       case "save-product": {
         var pmodal = a.closest(".modal");
@@ -3902,6 +4262,9 @@ window.App = window.App || {};
   };
   App.onDealStage = function (id, stage) { Store.updateDeal(id, { stage: stage }); render(); };
   App.onShip = function (id, field, value) { var p = {}; p[field] = value; Store.updateDeal(id, p); };
+  App.onContract = function (id, field, value) { var p = {}; p[field] = value; Store.updateContract(id, p); if (route.view === "contracts") render(); };
+  App.onHedge = function (id, field, value) { var p = {}; p[field] = value; Store.updateHedge(id, p); if (route.view === "risk") render(); };
+  App.onKyc = function (id, field, value) { var p = {}; p[field] = value; Store.updateCompany(id, p); if (route.view === "compliance") render(); };
 
   // Auto-create a follow-up task when you email a buyer (deduped, optional).
   function addFollowupTask(company) {

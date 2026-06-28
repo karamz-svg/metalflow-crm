@@ -402,3 +402,26 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 
 /* ---------- Email opens badge ---------- */
 .opens-badge { background: #243a52; color: #9fd0ff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+
+
+/* ---------- Invoice / status badges (contracts, invoices, compliance) ---------- */
+.inv-st {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  padding: 3px 9px; border-radius: 999px; text-transform: capitalize;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+}
+.inv-st.draft { background: #232c38; color: #aab8c8; border-color: #38465a; }
+.inv-st.proforma { background: #1f2a3a; color: #9fc2ef; border-color: #34507a; }
+.inv-st.commercial { background: #243a52; color: #9fd0ff; border-color: #356089; }
+.inv-st.provisional { background: #2c2a1a; color: #e8d4b0; border-color: #6b5a30; }
+.inv-st.final { background: #1d2c1f; color: #bfe6cc; border-color: #2f6b43; }
+.inv-st.partial { background: #2c241a; color: #f0cf95; border-color: #6b5330; }
+.inv-st.paid { background: #18301f; color: #5fd699; border-color: #2f6b43; }
+.inv-st.overdue { background: #321a1c; color: #f3878b; border-color: #7a3438; animation: pulse 1.8s infinite; }
+
+/* Inline inputs/selects inside data sheets stay compact */
+.sheet td select, .sheet td input {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 7px; padding: 5px 7px; font-size: 12.5px; font-family: inherit; max-width: 130px;
+}
+.sheet td select:focus, .sheet td input:focus { outline: none; border-color: var(--accent, #4a90d9); }
