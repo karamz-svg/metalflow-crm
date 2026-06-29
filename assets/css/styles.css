@@ -425,3 +425,25 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
   border-radius: 7px; padding: 5px 7px; font-size: 12.5px; font-family: inherit; max-width: 130px;
 }
 .sheet td select:focus, .sheet td input:focus { outline: none; border-color: var(--accent, #4a90d9); }
+
+
+/* ---------- Price bar size variants (cycled by the ⇕ button) ---------- */
+.ticker.sz-sm .tk { padding: 5px 12px 4px; min-width: 112px; gap: 1px; }
+.ticker.sz-sm .tk-price { font-size: 14px; }
+.ticker.sz-sm .tk-label { font-size: 9.5px; }
+.ticker.sz-sm .tk-sub, .ticker.sz-sm .tk-chg { font-size: 10px; }
+.ticker.sz-sm .tk-foot .tk-spark, .ticker.sz-sm .tk-spark-empty { display: none; }
+
+/* md = default (unchanged) */
+
+.ticker.sz-lg .tk { padding: 16px 26px 15px; min-width: 184px; }
+.ticker.sz-lg .tk-price { font-size: 26px; }
+
+
+/* ---------- Uploaded template file row ---------- */
+.docfile {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+  padding: 8px 11px; margin: -4px 0 6px; font-size: 12.5px;
+}
+.docfile .p-actions { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }

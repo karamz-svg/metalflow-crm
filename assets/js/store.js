@@ -44,7 +44,9 @@ window.App = window.App || {};
     autoFollowupTask: true,     // auto-create a follow-up task when you email a buyer
     trackEmails: false,         // append a tracked link to outgoing emails (needs public proxy)
     invoicePrefix: "INV-",      // invoice number prefix
-    invoiceSeq: 1               // next invoice sequence number
+    invoiceSeq: 1,              // next invoice sequence number
+    tickerSize: "md",           // top price-bar size: sm | md | lg (cycled from the bar)
+    docFiles: {}                // uploaded template files: { <type>: { name, mime, data(base64 dataURL) } }
   };
 
   // LME prices are entered manually (or via the optional live adapter).
@@ -73,45 +75,32 @@ window.App = window.App || {};
   }
   App.uid = uid;
 
-  /* ---- Clearly-labelled SAMPLE rows. Replace with real Apollo/CSV data. ---- */
-  function sampleCompanies() {
-    return [
-      {
-        id: uid(), name: "[SAMPLE] Rheinmetall Recycling GmbH", country: "DE",
-        city: "Düsseldorf", website: "example.com",
-        contactName: "Procurement Desk", email: "buyer@example.com", phone: "+49 000 000",
-        materials: ["copper-cathode", "cu-scrap-millberry", "aluminium-ingots"],
-        status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null,
-        notes: "Sample row — replace with real verified contact."
-      },
-      {
-        id: uid(), name: "[SAMPLE] Lombardia Metalli S.p.A.", country: "IT",
-        city: "Milan", website: "example.com",
-        contactName: "Purchasing", email: "acquisti@example.com", phone: "+39 000 000",
-        materials: ["brass-scrap-honey", "zinc-ingot-hg", "lead-refined"],
-        status: "yellow", lastEmailSubject: "Q3 supply — copper & brass", lastEmailAt: Date.now() - 86400000, lastReplyAt: null,
-        notes: "Sample row — replace with real verified contact."
-      },
-      {
-        id: uid(), name: "[SAMPLE] Iberia Nonferrous SL", country: "ES",
-        city: "Bilbao", website: "example.com",
-        contactName: "Trading", email: "trading@example.com", phone: "+34 000 000",
-        materials: ["al-scrap-ubc", "al-sows", "ss-304"],
-        status: "green", lastEmailSubject: "Aluminium sows availability", lastEmailAt: Date.now() - 172800000, lastReplyAt: Date.now() - 3600000,
-        notes: "Sample row — replied, follow up."
-      }
-    ];
+  /* ---- Build a full company record from a research-lead seed entry. ---- */
+  function mkSeedCompany(s) {
+    return {
+      id: uid(), name: s.name, country: s.country, city: s.city || "",
+      website: s.website || "", contactName: "", email: s.email || "", phone: "",
+      materials: (s.materials || []).slice(), people: [],
+      status: "red", lastEmailSubject: "", lastEmailAt: null, lastReplyAt: null,
+      notes: s.notes || "", activity: [],
+      kycStatus: "none", creditLimit: "", registrationNo: "", vat: "", sanctionsFlag: ""
+    };
+  }
+  // Seed with the REAL EU producer/refiner/recycler research leads (seed-eu.js),
+  // not placeholder samples. Emails are only the few that are publicly published.
+  function seedCompanies() {
+    return (App.EU_SEED || []).map(mkSeedCompany);
   }
 
   function freshState() {
-    var companies = sampleCompanies();
-    companies.forEach(function (c) { if (!Array.isArray(c.people)) c.people = []; });
+    var companies = seedCompanies();
     return {
       version: 1,
-      settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+      settings: Object.assign(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), { euSeeded: true }),
       prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)),
       companies: companies,
       customCountries: [],
+      customMetals: [],
       sheet: [],
       deals: [],
       tasks: [],
@@ -139,6 +128,23 @@ window.App = window.App || {};
     if (!Array.isArray(s.settings.templates)) s.settings.templates = [];
     if (!s.settings.margins || typeof s.settings.margins !== "object") s.settings.margins = {};
     if (!s.settings.docTemplates || typeof s.settings.docTemplates !== "object") s.settings.docTemplates = {};
+    if (!s.settings.docFiles || typeof s.settings.docFiles !== "object") s.settings.docFiles = {};
+    if (!s.settings.tickerSize) s.settings.tickerSize = "md";
+    if (!Array.isArray(s.customMetals)) s.customMetals = [];
+    // One-time migration: drop the old placeholder [SAMPLE] rows and seed the
+    // REAL EU research-lead firms (only once, tracked by settings.euSeeded).
+    if (!s.settings.euSeeded) {
+      if (Array.isArray(s.companies)) {
+        s.companies = s.companies.filter(function (c) { return !/^\s*\[SAMPLE\]/i.test(c.name || ""); });
+      }
+      (App.EU_SEED || []).forEach(function (sd) {
+        var dup = s.companies.some(function (c) {
+          return (c.name || "").toLowerCase() === (sd.name || "").toLowerCase() && c.country === sd.country;
+        });
+        if (!dup) s.companies.push(mkSeedCompany(sd));
+      });
+      s.settings.euSeeded = true;
+    }
     if (!Array.isArray(s.deals)) s.deals = [];
     if (!Array.isArray(s.tasks)) s.tasks = [];
     if (!Array.isArray(s.customProducts)) s.customProducts = [];
@@ -550,6 +556,36 @@ window.App = window.App || {};
     },
     updateHedge: function (id, patch) { var h = this.hedges().find(function (x) { return x.id === id; }); if (h) { Object.assign(h, patch); save(); } },
     deleteHedge: function (id) { var s = load(); s.hedges = (s.hedges || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Custom watch metals (Markets tab) ---------- */
+    customMetals: function () { var s = load(); if (!Array.isArray(s.customMetals)) s.customMetals = []; return s.customMetals; },
+    addCustomMetal: function (data) {
+      var s = load(); if (!Array.isArray(s.customMetals)) s.customMetals = [];
+      var m = Object.assign({ id: uid(), label: "New metal", unit: "/MT", value: null, prev: null, series: [] }, data || {});
+      s.customMetals.push(m); save(); return m;
+    },
+    updateCustomMetal: function (id, patch) {
+      var m = this.customMetals().find(function (x) { return x.id === id; });
+      if (m) {
+        if (patch && patch.value != null && patch.value !== "" && m.value != null && Number(patch.value) !== Number(m.value)) {
+          m.prev = m.value;
+          if (!Array.isArray(m.series)) m.series = [];
+          m.series.push(Number(patch.value)); m.series = m.series.slice(-30);
+        }
+        Object.assign(m, patch); save();
+      }
+      return m;
+    },
+    deleteCustomMetal: function (id) { var s = load(); s.customMetals = (s.customMetals || []).filter(function (x) { return x.id !== id; }); save(); },
+
+    /* ---------- Uploaded template files (base64 in settings.docFiles) ---------- */
+    setDocFile: function (key, file) {
+      var s = load(); if (!s.settings.docFiles) s.settings.docFiles = {};
+      if (file) s.settings.docFiles[key] = file; else delete s.settings.docFiles[key];
+      save();
+    },
+    docFile: function (key) { return (load().settings.docFiles || {})[key] || null; },
+
 
     /* ---------- Local backup snapshots ---------- */
     takeSnapshot: function () {

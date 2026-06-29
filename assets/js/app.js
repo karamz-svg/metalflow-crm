@@ -101,10 +101,13 @@ window.App = window.App || {};
       ? '<span class="price-warn" data-nav="settings" title="Open price settings">⚠️ ' + esc(App.priceMsg) + "</span>"
       : (!p.updatedAt ? '<span class="price-warn" data-nav="settings">⚠️ set up live prices</span>' : "");
 
+    var tsize = Store.settings().tickerSize || "md";
+    var sizeBtn = '<button class="btn sm" data-action="cycle-ticker-size" title="Resize the price bar (small / medium / large)">⇕ ' + tsize.toUpperCase() + "</button>";
+
     $("pricebar").innerHTML =
-      '<div class="ticker">' + cards + "</div>" +
+      '<div class="ticker sz-' + tsize + '">' + cards + "</div>" +
       '<div class="pb-meta">' + live +
-        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + ccyToggle +
+        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + sizeBtn + ccyToggle +
         '<button class="btn sm" data-action="refresh-prices">↻ Refresh</button>' +
         '<button class="btn sm primary" data-action="edit-prices">Edit</button>' +
       "</div>";
@@ -406,29 +409,57 @@ window.App = window.App || {};
   }
 
   /* ---- Shipments / logistics ---- */
+  // Public AIS trackers — no key needed; opens the live position for that vessel.
+  function vesselTrackUrl(d) {
+    if (d.imo && /\d{7}/.test(d.imo)) return "https://www.vesselfinder.com/?imo=" + encodeURIComponent(d.imo.match(/\d{7}/)[0]);
+    if (d.vessel) return "https://www.vesselfinder.com/vessels?name=" + encodeURIComponent(d.vessel);
+    return "";
+  }
   function viewShipments() {
     var deals = Store.deals().filter(function (d) {
-      return d.bl || d.container || d.vessel || d.eta || d.shipStatus || d.stage === "contract" || d.stage === "won";
+      return d.bl || d.container || d.vessel || d.imo || d.eta || d.shipStatus || d.stage === "contract" || d.stage === "won";
     });
     var statuses = ["", "Booked", "Loading", "In transit", "Arrived", "Delivered", "Delayed"];
     var rows = deals.map(function (d) {
       var sel = '<select onchange="App.onShip(\'' + d.id + '\',\'shipStatus\',this.value)">' +
         statuses.map(function (x) { return '<option value="' + x + '"' + ((d.shipStatus || "") === x ? " selected" : "") + ">" + (x || "—") + "</option>"; }).join("") + "</select>";
       function cell(k) { return '<td><input value="' + esc(d[k] || "") + '" onchange="App.onShip(\'' + d.id + "','" + k + '\',this.value)"/></td>'; }
+      var url = vesselTrackUrl(d);
+      var track = url
+        ? '<a class="btn sm primary" href="' + url + '" target="_blank" rel="noopener" title="Open live AIS position for this vessel">📍 Track</a>'
+        : '<span class="status-text" title="Add a vessel name or 7-digit IMO to the deal to enable tracking">—</span>';
       return "<tr>" +
         "<td>" + esc(d.title || "(deal)") + '<div class="status-text">' + esc(d.buyer || "") + "</div></td>" +
-        cell("bl") + cell("container") + cell("vessel") + cell("loadPort") + cell("dischargePort") +
+        cell("bl") + cell("container") + cell("vessel") +
+        '<td><input value="' + esc(d.imo || "") + '" placeholder="IMO" onchange="App.onShip(\'' + d.id + '\',\'imo\',this.value)" style="max-width:90px"/></td>' +
+        cell("loadPort") + cell("dischargePort") +
         '<td><input type="date" value="' + esc(d.eta || "") + '" onchange="App.onShip(\'' + d.id + '\',\'eta\',this.value)"/></td>' +
-        "<td>" + sel + "</td></tr>";
+        "<td>" + sel + "</td>" +
+        "<td>" + track + "</td></tr>";
     }).join("");
     return '<div class="page-head"><div><h2>Shipments &amp; logistics</h2>' +
-      '<div class="sub">Track contracted/won deals from booking to delivery. Add shipment details in a deal.</div></div></div>' +
+      '<div class="sub">Track each vessel live (public AIS via VesselFinder). Add a vessel name or 7-digit IMO in the deal, then hit 📍 Track.</div></div></div>' +
       (deals.length
-        ? '<table class="sheet"><thead><tr><th>Deal</th><th>B/L</th><th>Container</th><th>Vessel</th><th>Load</th><th>Discharge</th><th>ETA</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table>"
-        : '<div class="empty"><div class="big">🚢</div><p>No shipments yet. Move a deal to Contract/Won or add B/L & ETA in a deal.</p></div>');
+        ? '<table class="sheet"><thead><tr><th>Deal</th><th>B/L</th><th>Container</th><th>Vessel</th><th>IMO</th><th>Load</th><th>Discharge</th><th>ETA</th><th>Status</th><th>Live</th></tr></thead><tbody>' + rows + "</tbody></table>"
+        : '<div class="empty"><div class="big">🚢</div><p>No shipments yet. Move a deal to Contract/Won or add B/L &amp; ETA in a deal.</p></div>');
   }
 
   /* ---- Reports / P&L ---- */
+  // Realised profit contribution of a paid invoice: if it's linked to a contract
+  // we know the margin (value vs QP cost basis); otherwise we count revenue only.
+  function invoiceRealised(inv) {
+    var rev = (inv.paidAmount != null && inv.paidAmount !== "") ? Number(inv.paidAmount) : invoiceTotal(inv);
+    var profit = 0, knownCost = false;
+    if (inv.contractId) {
+      var ct = Store.contracts().find(function (c) { return c.id === inv.contractId; });
+      if (ct) {
+        var val = contractValueUSD(ct);
+        var cost = (ct.qpAvg !== "" && ct.qpAvg != null ? Number(ct.qpAvg) : 0) * (Number(ct.qtyMt) || 0);
+        if (val > 0) { profit = rev * ((val - cost) / val); knownCost = true; }
+      }
+    }
+    return { rev: rev, profit: profit, knownCost: knownCost };
+  }
   function viewReports() {
     var deals = Store.deals();
     var won = deals.filter(function (d) { return d.stage === "won"; });
@@ -436,7 +467,14 @@ window.App = window.App || {};
     function sum(arr, f) { return arr.reduce(function (a, d) { return a + (Number(d[f]) || 0); }, 0); }
     var wonRev = sum(won, "value"), wonCost = sum(won, "cost"), wonProfit = wonRev - wonCost;
     var openRev = sum(open, "value"), openProfit = openRev - sum(open, "cost");
-    var margin = wonRev ? Math.round(wonProfit / wonRev * 100) : 0;
+
+    // Paid invoices = realised cash. Fold them into realised revenue/profit.
+    var paidInv = Store.invoices().filter(function (i) { return i.status === "paid"; });
+    var invRev = 0, invProfit = 0, anyUnknownCost = false;
+    paidInv.forEach(function (i) { var r = invoiceRealised(i); invRev += r.rev; invProfit += r.profit; if (!r.knownCost) anyUnknownCost = true; });
+
+    var realRev = wonRev + invRev, realProfit = wonProfit + invProfit;
+    var margin = realRev ? Math.round(realProfit / realRev * 100) : 0;
 
     // by product (won)
     var byProd = {}; won.forEach(function (d) { var k = d.product || "—"; byProd[k] = byProd[k] || { rev: 0, profit: 0 }; byProd[k].rev += Number(d.value) || 0; byProd[k].profit += (Number(d.value) || 0) - (Number(d.cost) || 0); });
@@ -450,34 +488,53 @@ window.App = window.App || {};
       return "<tr><td>" + esc(m) + "</td><td>" + Prices.money(byMonth[m].rev) + "</td><td>" + Prices.money(byMonth[m].profit) + "</td></tr>";
     }).join("") || '<tr><td colspan="3" class="status-text">No won deals yet.</td></tr>';
 
-    return '<div class="page-head"><div><h2>Reports &amp; P&amp;L</h2><div class="sub">Realised vs pipeline performance (values in your display currency).</div></div></div>' +
+    // paid invoices table
+    var invRows = paidInv.length ? paidInv.map(function (i) {
+      var b = i.buyerId ? Store.companyById(i.buyerId) : null;
+      var r = invoiceRealised(i);
+      return "<tr><td>" + esc(i.number || "—") + '<div class="status-text">' + esc(b ? b.name : "") + "</div></td>" +
+        "<td>" + Prices.money(r.rev) + "</td><td>" + (r.knownCost ? Prices.money(r.profit) : '<span class="status-text">rev only</span>') + "</td></tr>";
+    }).join("") : '<tr><td colspan="3" class="status-text">No paid invoices yet — mark an invoice paid to see it here.</td></tr>';
+
+    return '<div class="page-head"><div><h2>Reports &amp; P&amp;L</h2><div class="sub">Realised (won deals + paid invoices) vs pipeline (values in your display currency).</div></div></div>' +
       '<div class="stat-row">' +
-        stat(Prices.money(wonRev), "Won revenue") +
-        statDot(Prices.money(wonProfit), "Won profit", "green") +
+        stat(Prices.money(realRev), "Realised revenue") +
+        statDot(Prices.money(realProfit), "Realised profit", "green") +
         stat(margin + "%", "Avg margin") +
+        statDot(Prices.money(invRev), "Paid invoices", "green") +
         stat(Prices.money(openRev), "Pipeline value") +
         stat(Prices.money(openProfit), "Pipeline profit") +
       "</div>" +
+      (anyUnknownCost ? '<div class="notice warn">Some paid invoices aren\'t linked to a contract, so only their revenue is counted (no cost basis to compute profit). Link an invoice to a contract for full P&amp;L.</div>' : "") +
       '<div class="grid cards" style="grid-template-columns:1fr 1fr;">' +
         '<div class="card"><h3>Won by product</h3><table class="sheet"><thead><tr><th>Product</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>' + prodRows + "</tbody></table></div>" +
         '<div class="card"><h3>Won by month</h3><table class="sheet"><thead><tr><th>Month</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>' + monthRows + "</tbody></table></div>" +
+        '<div class="card"><h3>Paid invoices</h3><table class="sheet"><thead><tr><th>Invoice</th><th>Revenue</th><th>Profit</th></tr></thead><tbody>' + invRows + "</tbody></table></div>" +
       "</div>";
   }
 
   /* ---- Markets: charts + price-alert log ---- */
+  function metalCard(label, val, prev, series, premium, extraBtns) {
+    var pct = (val != null && prev != null && Number(prev) !== 0) ? ((Number(val) - Number(prev)) / Number(prev) * 100) : null;
+    var col = pct == null ? "#8b97a6" : (pct >= 0 ? "#46d07f" : "#ef5a5a");
+    var chg = pct == null ? "" : ' <span style="color:' + col + '">' + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%</span>";
+    return '<div class="card"><h3>' + esc(label) + "</h3>" +
+      '<div style="font-size:24px;font-weight:700;font-family:ui-monospace,monospace">' + (val == null ? '<span class="status-text" style="font-size:14px">no price — set in Edit</span>' : Prices.money(val) + chg) + "</div>" +
+      '<div style="margin-top:8px">' + (Prices.sparkline(series, col, 280, 70) || '<span class="status-text">no history yet</span>') + "</div>" +
+      (premium != null ? '<div class="status-text">premium: ' + Prices.money(premium) + "/MT</div>" : "") +
+      (extraBtns || "") + "</div>";
+  }
   function viewMarkets() {
     var p = Store.prices();
     var ccy = Store.settings().displayCurrency || "USD";
-    var cards = App.PRICE_ROWS.filter(function (r) { return r.metal !== "iron"; }).map(function (r) {
+    var builtin = App.PRICE_ROWS.filter(function (r) { return r.metal !== "iron"; }).map(function (r) {
       var row = p.rows[r.key] || {};
-      if (row.value == null) return "";
-      var pct = Prices.changePct(row);
-      var col = pct == null ? "#8b97a6" : (pct >= 0 ? "#46d07f" : "#ef5a5a");
-      var chg = pct == null ? "" : ' <span style="color:' + col + '">' + (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%</span>";
-      return '<div class="card"><h3>' + esc(r.label) + "</h3>" +
-        '<div style="font-size:24px;font-weight:700;font-family:ui-monospace,monospace">' + Prices.money(row.value) + chg + "</div>" +
-        '<div style="margin-top:8px">' + (Prices.sparkline(row.series, col, 280, 70) || '<span class="status-text">no history yet</span>') + "</div>" +
-        (r.hasPremium && row.premium != null ? '<div class="status-text">premium: ' + Prices.money(row.premium) + "/MT</div>" : "") + "</div>";
+      return metalCard(r.label, row.value, row.prev, row.series, (r.hasPremium ? row.premium : null), "");
+    }).join("");
+    var custom = Store.customMetals().map(function (m) {
+      var btns = '<div class="btn-row" style="margin-top:8px"><button class="btn sm" data-action="edit-cmetal" data-id="' + m.id + '">✎ Update price</button>' +
+        '<button class="btn sm danger" data-action="del-cmetal" data-id="' + m.id + '">🗑</button></div>';
+      return metalCard(m.label + (m.unit && m.unit !== "/MT" ? " (" + esc(m.unit) + ")" : ""), m.value, m.prev, m.series, null, btns);
     }).join("");
     var alerts = Store.priceAlerts();
     var log = alerts.length ? alerts.slice(0, 30).map(function (a) {
@@ -488,9 +545,10 @@ window.App = window.App || {};
         Prices.money(a.from) + " → " + Prices.money(a.to) + "</span></div>";
     }).join("") : '<div class="status-text">No alerts logged yet. They appear when a metal moves more than your threshold (Settings → alertPct).</div>';
 
-    return '<div class="page-head"><div><h2>Markets</h2><div class="sub">Live charts (' + ccy + ') + price-move alert log.</div></div>' +
-      '<div class="spacer"></div><button class="btn sm" data-action="refresh-prices">↻ Refresh</button></div>' +
-      '<div class="grid cards">' + (cards || '<div class="status-text">No prices yet — refresh on the top bar.</div>') + "</div>" +
+    return '<div class="page-head"><div><h2>Markets</h2><div class="sub">Live charts (' + ccy + ') + price-move alert log. Add any metal you also trade.</div></div>' +
+      '<div class="spacer"></div><button class="btn primary" data-action="add-cmetal">+ Add metal</button>' +
+      '<button class="btn sm" data-action="refresh-prices">↻ Refresh</button></div>' +
+      '<div class="grid cards">' + (builtin + custom || '<div class="status-text">No prices yet — refresh on the top bar.</div>') + "</div>" +
       '<h3 style="margin:18px 0 10px">⚡ Price-move alerts</h3><div class="card">' + log + "</div>";
   }
 
@@ -965,14 +1023,16 @@ window.App = window.App || {};
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📄 Offer &amp; LOI documents</h3>' +
         '<div class="meta">Customise the offer (email + PDF) and the Letter of Intent. Placeholders: <span class="kbd">{{buyer}}</span> <span class="kbd">{{contact}}</span> <span class="kbd">{{lines}}</span> <span class="kbd">{{total}}</span> <span class="kbd">{{terms}}</span> <span class="kbd">{{validity}}</span> <span class="kbd">{{payment}}</span> <span class="kbd">{{notes}}</span> <span class="kbd">{{me}}</span> <span class="kbd">{{myCompany}}</span> <span class="kbd">{{date}}</span> <span class="kbd">{{products}}</span>.</div>' +
         '<div class="field" style="margin-top:10px;"><label>Offer template (email &amp; PDF body)</label><textarea data-set="offerTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.offerTemplate || BUILTIN_OFFER) + "</textarea></div>" +
+        docFileRow("offer") +
         '<div class="field"><label>Letter of Intent (LOI) template</label><textarea data-set="loiTemplate" style="min-height:150px;font-family:monospace;font-size:12px">' + esc(s.loiTemplate || BUILTIN_LOI) + "</textarea></div>" +
+        docFileRow("loi") +
         '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>📑 Trade document templates</h3>' +
-        '<div class="meta">Editable bodies for the Document Vault (📄 Docs on each buyer). Same placeholders as above.</div>' +
+        '<div class="meta">Editable bodies for the Document Vault (📄 Docs on each buyer). Same placeholders as above. You can also <strong>upload your own file</strong> (PDF/Word) per document — download it to edit outside the app, then re-upload.</div>' +
         ["sco", "icpo", "ncnda", "contract"].map(function (k) {
           var label = { sco: "Soft Corporate Offer (SCO)", icpo: "ICPO", ncnda: "NCNDA", contract: "Sales Contract" }[k];
           var val = (s.docTemplates && s.docTemplates[k]) || BUILTIN_DOCS[k];
-          return '<div class="field" style="margin-top:10px;"><label>' + label + '</label><textarea data-doc="' + k + '" style="min-height:120px;font-family:monospace;font-size:12px">' + esc(val) + "</textarea></div>";
+          return '<div class="field" style="margin-top:10px;"><label>' + label + '</label><textarea data-doc="' + k + '" style="min-height:120px;font-family:monospace;font-size:12px">' + esc(val) + "</textarea></div>" + docFileRow(k);
         }).join("") +
         '<div class="btn-row"><button class="btn primary" data-action="save-settings">Save settings</button></div></div>' +
       '<div class="card" style="max-width:640px;margin-top:16px;"><h3>👥 Team sync (shared data)</h3>' +
@@ -1146,13 +1206,27 @@ window.App = window.App || {};
       '<div class="meta" style="margin:2px 0 8px;">🚢 Logistics (shows in the Shipments tab)</div>' +
       '<div class="field-2">' + df("bl", "B/L number", "") + df("container", "Container(s)", "") + "</div>" +
       '<div class="field-2">' + df("vessel", "Vessel", "") +
-        '<div class="field"><label>Shipment status</label><select data-d="shipStatus">' + shipOpts + "</select></div></div>" +
+        df("imo", "Vessel IMO (for live tracking)", "") + "</div>" +
+      '<div class="field"><label>Shipment status</label><select data-d="shipStatus">' + shipOpts + "</select></div>" +
       '<div class="field-2">' + df("loadPort", "Load port", "") + df("dischargePort", "Discharge port", "") + "</div>" +
       '<div class="field"><label>Notes</label><textarea data-d="notes">' + esc(d.notes || "") + "</textarea></div>";
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
       '<button class="btn primary" data-action="save-deal" data-id="' + (d.id || "") + '">Save deal</button>';
     openModal(d.id ? "Edit deal" : "New deal", body, footer);
   }
+
+  /* ---- Add / edit a custom watch metal for the Markets tab ---- */
+  function customMetalForm(m) {
+    m = m || {};
+    var body = '<div class="meta">Track any extra metal/commodity you trade. Enter the latest price in USD (the display currency toggle converts it). Updating the price keeps a small history for the chart.</div>' +
+      '<div class="field" style="margin-top:10px"><label>Name</label><input data-cm="label" value="' + esc(m.label || "") + '" placeholder="e.g. Tin, Cobalt, Magnesium, Silver"/></div>' +
+      '<div class="field-2"><div class="field"><label>Latest price (USD)</label><input type="number" data-cm="value" value="' + esc(m.value == null ? "" : m.value) + '" placeholder="e.g. 28500"/></div>' +
+      '<div class="field"><label>Unit</label><input data-cm="unit" value="' + esc(m.unit || "/MT") + '" placeholder="/MT or /oz"/></div></div>';
+    var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn primary" data-action="save-cmetal" data-id="' + (m.id || "") + '">Save metal</button>';
+    openModal(m.id ? "Update metal" : "Add metal", body, footer);
+  }
+
 
   function templateForm(t) {
     t = t || {};
@@ -1229,6 +1303,37 @@ window.App = window.App || {};
     if (type === "loi") return s.loiTemplate || BUILTIN_LOI;
     return (s.docTemplates && s.docTemplates[type]) || BUILTIN_DOCS[type] || "";
   }
+  // Upload / download / remove an external template file for a doc type.
+  function docFileRow(key) {
+    var f = Store.docFile(key);
+    var input = '<label class="btn sm" style="cursor:pointer">📎 Upload file<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf,application/pdf" style="display:none" onchange="App.onDocFileUpload(this,\'' + key + '\')"/></label>';
+    if (f) {
+      return '<div class="docfile"><span>📄 ' + esc(f.name) + "</span>" +
+        '<span class="p-actions">' + input +
+        '<button class="btn sm" data-action="download-docfile" data-key="' + key + '">⬇ Download to edit</button>' +
+        '<button class="btn sm danger" data-action="remove-docfile" data-key="' + key + '">🗑</button></span></div>';
+    }
+    return '<div class="docfile"><span class="status-text">No file uploaded — the text template above is used.</span>' + input + "</div>";
+  }
+  App.onDocFileUpload = function (input, key) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast("File too large (max ~2 MB to fit in browser storage)."); input.value = ""; return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        Store.setDocFile(key, { name: file.name, mime: file.type, data: String(reader.result) });
+        render(); toast("Uploaded " + file.name + ".");
+      } catch (e) { toast("Could not save file (storage full?)."); }
+    };
+    reader.readAsDataURL(file);
+  };
+  App.downloadDataUrl = function (dataUrl, name) {
+    var aEl = document.createElement("a");
+    aEl.href = dataUrl; aEl.download = name || "template";
+    document.body.appendChild(aEl); aEl.click();
+    setTimeout(function () { document.body.removeChild(aEl); }, 0);
+  };
   App.fillDoc = function () {
     var c = App._docCompany || {};
     var type = ($("doc-type") || {}).value;
@@ -1243,6 +1348,7 @@ window.App = window.App || {};
       '<div class="field"><label>Preview (edit before sending; templates live in Settings)</label>' +
       '<textarea id="doc-body" style="min-height:260px;font-family:monospace;font-size:12px"></textarea></div>';
     var footer = '<button class="btn" data-action="close-modal">Cancel</button>' +
+      '<button class="btn" data-action="doc-dl-file">📎 Download attached file</button>' +
       '<button class="btn" data-action="doc-print">🖨 Print / PDF</button>' +
       '<button class="btn primary" data-action="doc-email">✉️ Email</button>';
     openModal("📄 Documents — " + (c.name || ""), body, footer);
@@ -1915,6 +2021,23 @@ window.App = window.App || {};
         if (rcp2.logId) Store.logActivity(rcp2.logId, "doc", dt.toUpperCase() + " printed");
         break;
       }
+      case "doc-dl-file": {
+        var dmx = a.closest(".modal");
+        var ty = (dmx.querySelector("#doc-type") || {}).value;
+        var f = Store.docFile(ty);
+        if (f) App.downloadDataUrl(f.data, f.name);
+        else toast("No file uploaded for this type — add one in Settings → templates.");
+        break;
+      }
+      case "download-docfile": {
+        var df1 = Store.docFile(a.getAttribute("data-key"));
+        if (df1) App.downloadDataUrl(df1.data, df1.name);
+        break;
+      }
+      case "remove-docfile":
+        Store.setDocFile(a.getAttribute("data-key"), null);
+        render(); toast("File removed.");
+        break;
 
       case "email-offer": {
         var mo = a.closest(".modal");
@@ -1975,6 +2098,31 @@ window.App = window.App || {};
           toast("Fetching " + next + " rate…");
           Prices.fetchLive(true).then(function (d) { if (d) { Store.applyPriceFeed(d); render(); } }).catch(function () {});
         } else { render(); }
+        break;
+      }
+
+      case "cycle-ticker-size": {
+        var order2 = ["sm", "md", "lg"];
+        var cs = Store.settings().tickerSize || "md";
+        Store.updateSettings({ tickerSize: order2[(order2.indexOf(cs) + 1) % order2.length] });
+        renderPriceBar();
+        break;
+      }
+
+      case "add-cmetal": customMetalForm(); break;
+      case "edit-cmetal": customMetalForm(Store.customMetals().find(function (m) { return m.id === id; })); break;
+      case "del-cmetal": if (confirm("Remove this metal from Markets?")) { Store.deleteCustomMetal(id); render(); } break;
+      case "save-cmetal": {
+        var cm = a.closest(".modal");
+        var label = (cm.querySelector("[data-cm=label]").value || "").trim();
+        if (!label) { toast("Give the metal a name."); break; }
+        var data = {
+          label: label,
+          unit: (cm.querySelector("[data-cm=unit]").value || "/MT").trim(),
+          value: cm.querySelector("[data-cm=value]").value === "" ? null : Number(cm.querySelector("[data-cm=value]").value)
+        };
+        if (id) Store.updateCustomMetal(id, data); else Store.addCustomMetal(data);
+        closeModal(); render(); toast(id ? "Metal updated." : "Metal added to Markets.");
         break;
       }
 
