@@ -45,7 +45,8 @@ window.App = window.App || {};
     trackEmails: false,         // append a tracked link to outgoing emails (needs public proxy)
     invoicePrefix: "INV-",      // invoice number prefix
     invoiceSeq: 1,              // next invoice sequence number
-    tickerSize: "md",           // top price-bar size: sm | md | lg (cycled from the bar)
+    tickerSize: "md",           // (legacy) top price-bar size
+    tickerScale: 1,             // top price-bar scale (0.6–1.6), set by the drag slider
     docFiles: {}                // uploaded template files: { <type>: { name, mime, data(base64 dataURL) } }
   };
 
@@ -130,6 +131,7 @@ window.App = window.App || {};
     if (!s.settings.docTemplates || typeof s.settings.docTemplates !== "object") s.settings.docTemplates = {};
     if (!s.settings.docFiles || typeof s.settings.docFiles !== "object") s.settings.docFiles = {};
     if (!s.settings.tickerSize) s.settings.tickerSize = "md";
+    if (s.settings.tickerScale == null || isNaN(Number(s.settings.tickerScale))) s.settings.tickerScale = 1;
     if (!Array.isArray(s.customMetals)) s.customMetals = [];
     // One-time migration: drop the old placeholder [SAMPLE] rows and seed the
     // REAL EU research-lead firms (only once, tracked by settings.euSeeded).

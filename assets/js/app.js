@@ -101,17 +101,27 @@ window.App = window.App || {};
       ? '<span class="price-warn" data-nav="settings" title="Open price settings">⚠️ ' + esc(App.priceMsg) + "</span>"
       : (!p.updatedAt ? '<span class="price-warn" data-nav="settings">⚠️ set up live prices</span>' : "");
 
-    var tsize = Store.settings().tickerSize || "md";
-    var sizeBtn = '<button class="btn sm" data-action="cycle-ticker-size" title="Resize the price bar (small / medium / large)">⇕ ' + tsize.toUpperCase() + "</button>";
+    var tscale = Number(Store.settings().tickerScale);
+    if (!tscale || isNaN(tscale)) tscale = 1;
+    var sizer = '<span class="tk-sizer" title="Drag to resize the price bar">' +
+      '<span class="tk-sizer-ico">⇕</span>' +
+      '<input type="range" min="0.6" max="1.6" step="0.02" value="' + tscale + '" oninput="App.onTickerScale(this.value)" aria-label="Resize price bar"/></span>';
 
     $("pricebar").innerHTML =
-      '<div class="ticker sz-' + tsize + '">' + cards + "</div>" +
+      '<div class="ticker" style="--tk-scale:' + tscale + '">' + cards + "</div>" +
       '<div class="pb-meta">' + live +
-        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + sizeBtn + ccyToggle +
+        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + sizer + ccyToggle +
         '<button class="btn sm" data-action="refresh-prices">↻ Refresh</button>' +
         '<button class="btn sm primary" data-action="edit-prices">Edit</button>' +
       "</div>";
   }
+  // Live-resize the price bar from the drag slider; persist (debounced) without re-rendering.
+  App.onTickerScale = function (v) {
+    var t = document.querySelector(".ticker");
+    if (t) t.style.setProperty("--tk-scale", v);
+    clearTimeout(App._tkSaveTimer);
+    App._tkSaveTimer = setTimeout(function () { Store.updateSettings({ tickerScale: Number(v) }); }, 350);
+  };
 
   /* =========================================================
      SIDEBAR NAV
@@ -627,6 +637,7 @@ window.App = window.App || {};
         "<td>" + Prices.money(val) + '<div class="status-text">prov ' + (Number(c.provisionalPct) || 0) + "%: " + Prices.money(val * (Number(c.provisionalPct) || 0) / 100) + "</div></td>" +
         '<td><select onchange="App.onContract(\'' + c.id + "','status',this.value)\">" + ["draft", "active", "priced", "closed", "cancelled"].map(function (st) { return '<option value="' + st + '"' + (c.status === st ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></td>" +
         '<td><button class="btn sm" data-action="contract-invoice" data-id="' + c.id + '" title="Create provisional invoice">🧾</button>' +
+          (c.doc ? '<button class="btn sm" data-action="view-contract-doc" data-id="' + c.id + '" title="View attached: ' + esc(c.doc.name) + '">📄</button>' : '<button class="btn sm" data-action="edit-contract" data-id="' + c.id + '" title="Attach counterparty document">📎</button>') +
           '<button class="btn sm" data-action="edit-contract" data-id="' + c.id + '">✎</button>' +
           '<button class="btn sm danger" data-action="del-contract" data-id="' + c.id + '">🗑</button></td>' +
         "</tr>";
@@ -1134,6 +1145,7 @@ window.App = window.App || {};
 
   function contractForm(c) {
     c = c || {};
+    App._pendingContractDoc = null;
     var buyerOpts = '<option value="">— counterparty —</option>' + Store.companies().map(function (x) {
       return '<option value="' + x.id + '"' + (c.buyerId === x.id ? " selected" : "") + ">" + esc(x.name) + "</option>";
     }).join("");
@@ -1152,7 +1164,14 @@ window.App = window.App || {};
       '<div class="field-2">' + f("premium", "Premium USD/MT", "", "number") + f("marginPct", "Margin %", "", "number") + "</div>" +
       '<div class="field-2">' + f("qpAvg", "QP avg price USD/MT (when known)", "blank = use live", "number") + f("provisionalPct", "Provisional %", "90", "number") + "</div>" +
       '<div class="field-2">' + f("incoterm", "Incoterm", "CIF") + f("port", "Port", "") + "</div>" +
-      '<div class="field"><label>Notes</label><textarea data-c="notes">' + esc(c.notes || "") + "</textarea></div>";
+      '<div class="field"><label>Notes</label><textarea data-c="notes">' + esc(c.notes || "") + "</textarea></div>" +
+      '<div class="field"><label>Counterparty document (their signed contract / SPA / PO they send you)</label>' +
+        '<div class="docfile">' +
+          (c.doc ? '<span id="contract-doc-name">📄 ' + esc(c.doc.name) + "</span>" : '<span id="contract-doc-name" class="status-text">No document attached yet</span>') +
+          '<span class="p-actions">' +
+            '<label class="btn sm" style="cursor:pointer">📎 Upload<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf,image/*,application/pdf" style="display:none" onchange="App.onContractDocUpload(this,\'' + (c.id || "") + '\')"/></label>' +
+            (c.doc ? '<button class="btn sm" data-action="view-contract-doc" data-id="' + (c.id || "") + '">👁 View</button><button class="btn sm danger" data-action="remove-contract-doc" data-id="' + (c.id || "") + '">🗑</button>' : "") +
+          "</span></div></div>";
     var footer = '<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="save-contract" data-id="' + (c.id || "") + '">Save contract</button>';
     openModal(c.id ? "Edit contract" : "New contract", body, footer);
   }
@@ -1333,6 +1352,35 @@ window.App = window.App || {};
     aEl.href = dataUrl; aEl.download = name || "template";
     document.body.appendChild(aEl); aEl.click();
     setTimeout(function () { document.body.removeChild(aEl); }, 0);
+  };
+  // Open a stored data-URL (PDF/doc) in a new tab via a Blob URL (works for large files).
+  App.openDataUrl = function (dataUrl) {
+    try {
+      var parts = dataUrl.split(","), mime = ((parts[0] || "").match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+      var bin = atob(parts[1] || ""), len = bin.length, arr = new Uint8Array(len);
+      for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([arr], { type: mime }));
+      window.open(url, "_blank");
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    } catch (e) { try { window.open(dataUrl, "_blank"); } catch (_e) {} }
+  };
+  // Attach a counterparty document to a contract (or hold it for a new one).
+  App.onContractDocUpload = function (input, id) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) { toast("File too large (max ~4 MB to fit browser storage)."); input.value = ""; return; }
+    var r = new FileReader();
+    r.onload = function () {
+      var doc = { name: file.name, mime: file.type, data: String(r.result) };
+      if (id) { Store.updateContract(id, { doc: doc }); render(); toast("Attached " + file.name + "."); }
+      else {
+        App._pendingContractDoc = doc;
+        var lab = document.getElementById("contract-doc-name");
+        if (lab) { lab.textContent = "📄 " + file.name; lab.className = ""; }
+        toast("Attached " + file.name + " — saves with the contract.");
+      }
+    };
+    r.readAsDataURL(file);
   };
   App.fillDoc = function () {
     var c = App._docCompany || {};
@@ -1762,8 +1810,24 @@ window.App = window.App || {};
       case "save-contract": {
         var cm = a.closest(".modal"); var data = {};
         cm.querySelectorAll("[data-c]").forEach(function (el) { data[el.getAttribute("data-c")] = el.value; });
+        if (App._pendingContractDoc) data.doc = App._pendingContractDoc;
         if (id) Store.updateContract(id, data); else Store.addContract(data);
+        App._pendingContractDoc = null;
         closeModal(); render(); toast(id ? "Contract updated." : "Contract added.");
+        break;
+      }
+      case "view-contract-doc": {
+        var vdoc = id ? (Store.contracts().find(function (x) { return x.id === id; }) || {}).doc : App._pendingContractDoc;
+        if (vdoc && vdoc.data) App.openDataUrl(vdoc.data); else toast("No document attached.");
+        break;
+      }
+      case "remove-contract-doc": {
+        if (id) { Store.updateContract(id, { doc: null }); render(); toast("Document removed."); }
+        else {
+          App._pendingContractDoc = null;
+          var lab = document.getElementById("contract-doc-name");
+          if (lab) { lab.textContent = "No document attached yet"; lab.className = "status-text"; }
+        }
         break;
       }
       case "contract-invoice": {
@@ -2098,14 +2162,6 @@ window.App = window.App || {};
           toast("Fetching " + next + " rate…");
           Prices.fetchLive(true).then(function (d) { if (d) { Store.applyPriceFeed(d); render(); } }).catch(function () {});
         } else { render(); }
-        break;
-      }
-
-      case "cycle-ticker-size": {
-        var order2 = ["sm", "md", "lg"];
-        var cs = Store.settings().tickerSize || "md";
-        Store.updateSettings({ tickerSize: order2[(order2.indexOf(cs) + 1) % order2.length] });
-        renderPriceBar();
         break;
       }
 

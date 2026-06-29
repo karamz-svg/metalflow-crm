@@ -79,19 +79,20 @@ a:hover { text-decoration: underline; }
 .ticker::-webkit-scrollbar { height: 6px; }
 .ticker::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .tk {
-  padding: 12px 20px 11px; min-width: 150px; flex: 0 0 auto;
+  padding: calc(12px * var(--tk-scale, 1)) calc(20px * var(--tk-scale, 1)) calc(11px * var(--tk-scale, 1));
+  min-width: calc(150px * var(--tk-scale, 1)); flex: 0 0 auto;
   border-right: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; justify-content: center; gap: 3px;
 }
-.tk-label { font-size: 11px; letter-spacing: .06em; color: #8b97a6; text-transform: uppercase; white-space: nowrap; }
+.tk-label { font-size: calc(11px * var(--tk-scale, 1)); letter-spacing: .06em; color: #8b97a6; text-transform: uppercase; white-space: nowrap; }
 .tk-price {
   font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
-  font-size: 21px; font-weight: 700; color: #f3f6fa; white-space: nowrap; line-height: 1.1;
+  font-size: calc(21px * var(--tk-scale, 1)); font-weight: 700; color: #f3f6fa; white-space: nowrap; line-height: 1.1;
 }
-.tk-chg { font-family: inherit; font-size: 12.5px; font-weight: 700; margin-left: 4px; }
+.tk-chg { font-family: inherit; font-size: calc(12.5px * var(--tk-scale, 1)); font-weight: 700; margin-left: 4px; }
 .tk-chg.up { color: #46d07f; }
 .tk-chg.down { color: #ef5a5a; }
 .tk-chg.flat { color: #8b97a6; }
-.tk-sub { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #6f7c8b; white-space: nowrap; }
+.tk-sub { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: calc(11px * var(--tk-scale, 1)); color: #6f7c8b; white-space: nowrap; }
 .tk-foot { display: flex; align-items: center; gap: 8px; }
 .tk-spark { display: block; opacity: .9; }
 .tk-spark-empty { width: 74px; height: 22px; display: inline-block; }
@@ -427,17 +428,20 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .sheet td select:focus, .sheet td input:focus { outline: none; border-color: var(--accent, #4a90d9); }
 
 
-/* ---------- Price bar size variants (cycled by the ⇕ button) ---------- */
-.ticker.sz-sm .tk { padding: 5px 12px 4px; min-width: 112px; gap: 1px; }
-.ticker.sz-sm .tk-price { font-size: 14px; }
-.ticker.sz-sm .tk-label { font-size: 9.5px; }
-.ticker.sz-sm .tk-sub, .ticker.sz-sm .tk-chg { font-size: 10px; }
-.ticker.sz-sm .tk-foot .tk-spark, .ticker.sz-sm .tk-spark-empty { display: none; }
-
-/* md = default (unchanged) */
-
-.ticker.sz-lg .tk { padding: 16px 26px 15px; min-width: 184px; }
-.ticker.sz-lg .tk-price { font-size: 26px; }
+/* ---------- Price bar drag-to-resize slider ---------- */
+.tk-sizer { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+.tk-sizer-ico { font-size: 13px; opacity: .8; }
+.tk-sizer input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 84px; height: 4px; cursor: ew-resize;
+  background: var(--line); border-radius: 999px; outline: none;
+}
+.tk-sizer input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent, #4a90d9); border: 2px solid #0c1219; cursor: ew-resize;
+}
+.tk-sizer input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent, #4a90d9); border: 2px solid #0c1219; cursor: ew-resize;
+}
 
 
 /* ---------- Uploaded template file row ---------- */
