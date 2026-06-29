@@ -570,7 +570,7 @@ window.App = window.App || {};
         '<td><select onchange="App.onContract(\'' + c.id + "','status',this.value)\">" + ["draft", "active", "priced", "closed", "cancelled"].map(function (st) { return '<option value="' + st + '"' + (c.status === st ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></td>" +
         '<td><button class="btn sm" data-action="contract-invoice" data-id="' + c.id + '" title="Create provisional invoice">🧾</button>' +
           '<button class="btn sm" data-action="edit-contract" data-id="' + c.id + '">✎</button>' +
-          '<button class="btn sm danger" data-action="del-contract" data-id="' + c.id + '">🗑</button></td>" +
+          '<button class="btn sm danger" data-action="del-contract" data-id="' + c.id + '">🗑</button></td>' +
         "</tr>";
     }).join("");
     var totVal = cs.reduce(function (a, c) { return a + contractValueUSD(c); }, 0);
@@ -603,7 +603,7 @@ window.App = window.App || {};
         '<td>' + (i.status !== "paid" ? '<button class="btn sm primary" data-action="invoice-paid" data-id="' + i.id + '">Mark paid</button>' : "✓") +
           '<button class="btn sm" data-action="invoice-print" data-id="' + i.id + '">🖨</button>' +
           '<button class="btn sm" data-action="edit-invoice" data-id="' + i.id + '">✎</button>' +
-          '<button class="btn sm danger" data-action="del-invoice" data-id="' + i.id + '">🗑</button></td>" +
+          '<button class="btn sm danger" data-action="del-invoice" data-id="' + i.id + '">🗑</button></td>' +
         "</tr>";
     }).join("");
     var lcWarn = lcSoon.length ? '<div class="notice warn">⏳ ' + lcSoon.length + " open invoice(s) have an LC expiring within 14 days.</div>" : "";
@@ -644,7 +644,7 @@ window.App = window.App || {};
         '<td><select onchange="App.onHedge(\'' + h.id + "','side',this.value)\">" + ["buy", "sell"].map(function (sd) { return '<option' + (h.side === sd ? " selected" : "") + ">" + sd + "</option>"; }).join("") + "</select></td>" +
         '<td><input value="' + esc(h.qtyMt) + '" onchange="App.onHedge(\'' + h.id + '\',\'qtyMt\',this.value)"/></td>' +
         '<td><input value="' + esc(h.price) + '" onchange="App.onHedge(\'' + h.id + '\',\'price\',this.value)"/></td>' +
-        '<td><button class="btn sm danger" data-action="del-hedge" data-id="' + h.id + '">🗑</button></td></tr>";
+        '<td><button class="btn sm danger" data-action="del-hedge" data-id="' + h.id + '">🗑</button></td></tr>';
     }).join("");
     var totMtm = Object.keys(metals).reduce(function (a, k) { return a + metals[k].mtm; }, 0);
     return '<div class="page-head"><div><h2>Risk / positions</h2><div class="sub">Net physical vs hedge exposure and mark-to-market (indicative, at current prices).</div></div>' +
