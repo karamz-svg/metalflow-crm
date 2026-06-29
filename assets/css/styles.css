@@ -428,22 +428,6 @@ table.offer .up, table.offer .lt { font-family: ui-monospace, Menlo, Consolas, m
 .sheet td select:focus, .sheet td input:focus { outline: none; border-color: var(--accent, #4a90d9); }
 
 
-/* ---------- Price bar drag-to-resize slider ---------- */
-.tk-sizer { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
-.tk-sizer-ico { font-size: 13px; opacity: .8; }
-.tk-sizer input[type="range"] {
-  -webkit-appearance: none; appearance: none; width: 84px; height: 4px; cursor: ew-resize;
-  background: var(--line); border-radius: 999px; outline: none;
-}
-.tk-sizer input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
-  background: var(--accent, #4a90d9); border: 2px solid #0c1219; cursor: ew-resize;
-}
-.tk-sizer input[type="range"]::-moz-range-thumb {
-  width: 14px; height: 14px; border-radius: 50%; background: var(--accent, #4a90d9); border: 2px solid #0c1219; cursor: ew-resize;
-}
-
-
 /* ---------- Uploaded template file row ---------- */
 .docfile {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

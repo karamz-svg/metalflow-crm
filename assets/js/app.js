@@ -90,8 +90,6 @@ window.App = window.App || {};
       "</div>";
     }).join("");
 
-    var live = Store.settings().priceLiveSeconds > 0 ? '<span class="tk-live">● LIVE</span>' : "";
-    var delayed = p.delayed ? "delayed/indicative" : "manual";
     var rates = p.fxRates || {};
     var noFx = (ccy !== "USD" && !rates[ccy] && !(ccy === "EUR" && p.fx));
     var symMap = { USD: "$ USD", EUR: "€ EUR", GBP: "£ GBP", CNY: "¥ CNY" };
@@ -103,25 +101,14 @@ window.App = window.App || {};
 
     var tscale = Number(Store.settings().tickerScale);
     if (!tscale || isNaN(tscale)) tscale = 1;
-    var sizer = '<span class="tk-sizer" title="Drag to resize the price bar">' +
-      '<span class="tk-sizer-ico">⇕</span>' +
-      '<input type="range" min="0.6" max="1.6" step="0.02" value="' + tscale + '" oninput="App.onTickerScale(this.value)" aria-label="Resize price bar"/></span>';
 
     $("pricebar").innerHTML =
       '<div class="ticker" style="--tk-scale:' + tscale + '">' + cards + "</div>" +
-      '<div class="pb-meta">' + live +
-        "<span>" + esc(p.source) + " · " + esc(delayed) + "</span>" + warn + sizer + ccyToggle +
+      '<div class="pb-meta">' + warn + ccyToggle +
         '<button class="btn sm" data-action="refresh-prices">↻ Refresh</button>' +
         '<button class="btn sm primary" data-action="edit-prices">Edit</button>' +
       "</div>";
   }
-  // Live-resize the price bar from the drag slider; persist (debounced) without re-rendering.
-  App.onTickerScale = function (v) {
-    var t = document.querySelector(".ticker");
-    if (t) t.style.setProperty("--tk-scale", v);
-    clearTimeout(App._tkSaveTimer);
-    App._tkSaveTimer = setTimeout(function () { Store.updateSettings({ tickerScale: Number(v) }); }, 350);
-  };
 
   /* =========================================================
      SIDEBAR NAV
